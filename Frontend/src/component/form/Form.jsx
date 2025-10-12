@@ -8,7 +8,8 @@ export function Form({
     onSubmit, 
     submitText = "Submit", 
     cancelText, 
-    onCancel 
+    onCancel,
+    errorText
 }) {
     return (
         <div className="rounded-xl p-6 w-full">
@@ -55,9 +56,12 @@ export function Form({
                                             {subField.type === "select" ? (
                                                 <select
                                                     name={subField.name}
+                                                    disabled={field.disabled}
                                                     defaultValue={subField.defaultValue || ""}
                                                     required={subField.required ?? true}
-                                                    className="w-full bg-white border border-gray-300 rounded-lg px-3 h-9 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    className={`
+                                                        w-full bg-white border border-gray-300 rounded-lg px-3 h-9 focus:outline-none focus:ring-2 focus:ring-blue-500
+                                                    `}
                                                 >
                                                     {subField.options?.map((opt, i) => (
                                                         <option key={i} value={opt}>{opt}</option>
@@ -67,6 +71,7 @@ export function Form({
                                                 <input
                                                     type={subField.type || "text"}
                                                     name={subField.name}
+                                                    disabled={field.disabled}
                                                     placeholder={subField.placeholder || ""}
                                                     defaultValue={subField.defaultValue || ""}
                                                     required={subField.required ?? true}
@@ -93,6 +98,7 @@ export function Form({
                             {field.type === "select" ? (
                                 <select
                                     name={field.name}
+                                    disabled={field.disabled}
                                     defaultValue={field.defaultValue || ""}
                                     required={field.required ?? true}
                                     className="w-full bg-white border border-gray-300 rounded-lg px-3 h-9 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -105,6 +111,7 @@ export function Form({
                                 <input
                                     type={field.type || "text"}
                                     name={field.name}
+                                    disabled={field.disabled}
                                     placeholder={field.placeholder || ""}
                                     defaultValue={field.defaultValue || ""}
                                     required={field.required ?? true}
@@ -114,9 +121,12 @@ export function Form({
                         </div>
                     );
                 })}
-
+                
+                <div className="col-span-1 md:col-span-2 flex align-center justify-center border-t mt-4  font-bold text-lg">
+                    {errorText && <p className="text-red-600 mt-2 align-center">{errorText}</p>}
+                </div>
                 {/* Footer Buttons */}
-                <div className="col-span-1 md:col-span-2 flex justify-end gap-2 border-t mt-4 pt-4">
+                <div className="col-span-1 md:col-span-2 flex justify-end gap-2 pt-4">
                     {onCancel && (
                         <Button
                             type="button"

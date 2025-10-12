@@ -1,89 +1,152 @@
 import React from 'react';
-import { useState, useEffect, useMemo } from 'react'
-import { Search } from './component/ui/search'
+import { useState, useEffect, useMemo } from 'react';
+import { Search } from './component/ui/search';
 import { applySearchAndFilter } from './component/utils/applySearchFilter';
-import { Table } from './component/data/table';
+import { Table } from './component/data/table'; 
 import { Card } from './component/ui/card';
 import { Button } from './component/ui/button';
 import { Filter } from './component/ui/filter';
 import { useFetchData } from './component/hooks/useFetchData';
 import AddEmployeeModal from './component/modals/AddEmployeeModal';
-import EditEmployeeModal from './component/modals/EditEmployeeModal';
+import ViewEmployeeModal from './component/modals/viewEmployeeModal';
 
-const tabList = [ "Employed", "Archive" ]
+const tabList = ["Employed", "Archive"];
+
+const getActionButtons = (row, activeTab, handleView, handleDocuments, handleDelete) => {
+    if (activeTab === "employed") {
+        return [
+            {
+                img: "../img/Edit_Icon.png",
+                alt: "View Icon",
+                onClick: () => handleView(row)
+            },
+            {
+                img: "../img/Reports_Icon.png",
+                alt: "Report Icon",
+                onClick: () => handleDocuments(row)
+            },
+            {
+                img: "../img/Delete_Icon.png",
+                alt: "Delete Icon",
+                onClick: () => handleDelete(row.employee_id)
+            }
+        ];
+    } else if (activeTab === "archive") {
+        return [
+            {
+                img: "../img/Edit_Icon.png",
+                alt: "View Icon",
+                onClick: () => handleView(row)
+            }
+        ];
+    }
+    return [];
+};
 
 function Employees() {
     const itemsPerPage = 5; 
-    const [query, setQuery] = useState("")
-    const [activeTab, setActiveTab] = useState("employed")
+    const [api, setApi] = useState("employees");
+    const [query, setQuery] = useState("");
+    const [activeTab, setActiveTab] = useState("employed");
     const [selectedSort, setSelectedSort] = useState("ASC");
     const [currentPage, setCurrentPage] = useState(1);
     const [selectedId, setSelectedId] = useState(null);
     const [isAddOpen, setIsAddOpen] = useState(false);
-    const [isEditOpen, setIsEditOpen] = useState(false);
+    const [isViewOpen, setIsViewOpen] = useState(false);
 
-    const columns = [
-        { key: "employee_id", title: "Employee ID" },
-        { key: "name", title: "Name" },
-        { key: "position", title: "Position" },
-        { key: "type", title: "Type"},
-        { key: "status", title: "Status"},
-        { key: "documents", title: "Documents"},
-        { key: "actions",
-            title: "Actions",
-            render: (row) => (
-                <div className="flex gap-2">
-                    <Button 
-                        onClick={() => handleEdit(row)}
-                        className="rounded-[50px] hover:bg-black/20 w-10 h-10"
-                    >
-                        <img src="../img/Edit_Icon.png" alt="Edit Icon"></img>
-                    </Button>
+    const handleView = (row) => {
+        setSelectedId(row.employee_id);
+        setIsViewOpen(true);
+    };
 
-                    <Button 
-                        onClick={() => handleDocuments(row)}
-                        className="rounded-[50px] hover:bg-black/20 mr-2 ml-2"
-                    >
-                        <img src="../img/Reports_Icon.png" alt="Reports Icon"></img>
-                    </Button>
+    const handleDocuments = (row) => {
+        // Implement if needed
+    };
 
-                    <Button 
-                        onClick={() => handleDelete(row.employee_id)}
-                        className="rounded-[50px] hover:bg-black/20"
-                    >
-                        <img src="../img/Delete_Icon.png" alt="Delete Icon"></img>
-                    </Button>
-                </div>
-            )
+    const handleDelete = async (id) => {
+        if (!window.confirm("Are you sure you want to delete this employee?")) return;
+        try {
+            const res = await fetch(`http://localhost:3001/api/${api}/${id}`, { method: "DELETE" });
+            if (!res.ok) throw new Error("Delete failed");
+            await res.json();
+            updateData(prev => prev.filter(emp => emp.employee_id !== id));
+        } catch (err) {
+            console.error("Failed to delete employee:", err);
         }
-    ];
+    };
 
     const transformEmployee = (emp) => ({
         employee_id: emp.employee_id,
         name: emp.fullname,
         position: emp.position,
         type: emp.employment_type,
-        status: 
-            activeTab.toLowerCase() === "archive" ? (
-                <span className="px-4 py-1 bg-[#FEE2E2] border border-[#991B1B] text-[10px] rounded-[40px]">
-                    {emp.status}
-                </span>     
-            ) : (
-                <span className={`px-4 py-1 ${emp.status === "Employed" ? "bg-[#DCFCE7]" : "bg-[#FEF9C3]"} border border-[#166534] text-[10px] rounded-[40px]`}>
-                    {emp.status}
-                </span>
-            ),
-        documents: emp.documents_complete
-            ? <span className="px-4 py-1 bg-[#DCFCE7] border border-[#166534] text-[10px] rounded-[40px]">Complete</span>
-            : <span className="px-4 py-1 bg-[#FEF9C3] border border-[#854D0E] text-[10px] rounded-[40px]">Incomplete</span>,
+        status: emp.status,
+        documents_complete: emp.documents_complete
     });
-    
+
     const { data, loading, pushData, updateData } = useFetchData(
-        activeTab.toLowerCase() === "employed"
-          ? "http://localhost:3001/api/employees"
-          : "http://localhost:3001/api/archive",
-        transformEmployee,
+        `http://localhost:3001/api/${api}`,
+        transformEmployee
     );
+
+    const columns = [
+        { key: "employee_id", title: "Employee ID" },
+        { key: "name", title: "Name" },
+        { key: "position", title: "Position" },
+        { key: "type", title: "Type" },
+        {
+            key: "status",
+            title: "Status",
+            render: (row) => (
+                <span
+                    className={`px-4 py-1 rounded-[40px] text-[10px] border ${
+                        activeTab === "archive"
+                            ? "bg-[#FEE2E2] border-[#991B1B]"
+                            : row.status === "Employed"
+                                ? "bg-[#DCFCE7] border-[#166534]"
+                                : "bg-[#FEF9C3] border-[#854D0E]"
+                    }`}
+                >
+                    {row.status}
+                </span>
+            )
+        },
+        {
+            key: "documents",
+            title: "Documents",
+            render: (row) => (
+                <span
+                    className={`px-4 py-1 rounded-[40px] text-[10px] border ${
+                        row.documents_complete
+                            ? "bg-[#DCFCE7] border-[#166534]"
+                            : "bg-[#FEF9C3] border-[#854D0E]"
+                    }`}
+                >
+                    {row.documents_complete ? "Complete" : "Incomplete"}
+                </span>
+            )
+        },
+        {
+            key: "actions",
+            title: "Actions",
+            render: (row) => {
+                const buttons = getActionButtons(row, activeTab.toLowerCase(), handleView, handleDocuments, handleDelete);
+                return (
+                    <div className="flex gap-2">
+                        {buttons.map((btn, idx) => (
+                            <Button
+                                key={idx}
+                                onClick={btn.onClick}
+                                className="rounded-[50px] hover:bg-black/20 w-10 h-10"
+                            >
+                                <img src={btn.img} alt={btn.alt} />
+                            </Button>
+                        ))}
+                    </div>
+                );
+            }
+        }
+    ];
 
     const filteredData = useMemo(() => {
         return applySearchAndFilter(
@@ -96,28 +159,57 @@ function Employees() {
     }, [data, query]);
 
     const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-    const handleAddEmployee = () => setIsAddOpen(true);
 
-    const handleDelete = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this employee?")) return;
-        try {
-            const res = await fetch(`http://localhost:3001/api/employees/${id}`, { method: "DELETE" });
-            if (!res.ok) throw new Error("Delete failed");
-            await res.json();
-            updateData(prev => prev.filter(emp => emp.employee_id !== id));
-        } catch (err) {
-            console.error("Failed to delete employee:", err);
+    const sortedData = useMemo(() => {
+        if (!selectedSort) return filteredData;
+
+        return [...filteredData].sort((a, b) => {
+            const nameA = (a.employee_id || "").toUpperCase();
+            const nameB = (b.employee_id || "").toUpperCase();
+
+            if (nameA < nameB) return selectedSort === "ASC" ? -1 : 1;
+            if (nameA > nameB) return selectedSort === "ASC" ? 1 : -1;
+            return 0;
+        });
+    }, [filteredData, selectedSort]);
+
+    const paginatedData = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        return sortedData.slice(startIndex, endIndex);
+    }, [sortedData, currentPage]);
+    
+    const getPageNumbers = (currentPage, totalPages, maxButtons = 5) => {
+        const pages = [];
+
+        if (totalPages <= maxButtons) {
+            // show all pages if totalPages <= maxButtons
+            for (let i = 1; i <= totalPages; i++) pages.push(i);
+        } else {
+            let start = Math.max(currentPage - Math.floor(maxButtons / 2), 1);
+            let end = start + maxButtons - 1;
+
+            if (end > totalPages) {
+                end = totalPages;
+                start = end - maxButtons + 1;
+            }
+
+            for (let i = start; i <= end; i++) pages.push(i);
         }
-    };
 
-    const handleEdit = (row) => {
-        setSelectedId(row.employee_id);
-        setIsEditOpen(true);
+        return pages;
     };
+    
+    const pageNumbers = getPageNumbers(currentPage, totalPages, 5);
+    
+    useEffect(() => {
+        const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+        if (currentPage > totalPages) {
+            setCurrentPage(totalPages || 1);
+        }
+    }, [filteredData, currentPage, itemsPerPage]);
 
-    const handleDocuments = (row) => {
-        // Implement if needed
-    };
+    const handleAddEmployee = () => setIsAddOpen(true);
 
     const headerContent = (
         <div className="flex items-center w-full gap-4">
@@ -147,35 +239,6 @@ function Employees() {
         </div>
     );
 
-    const sortedData = useMemo(() => {
-        if (!selectedSort) return filteredData;
-
-        return [...filteredData].sort((a, b) => {
-            // Example: sort by name
-            const nameA = a.name.toUpperCase();
-            const nameB = b.name.toUpperCase();
-
-            if (nameA < nameB) return selectedSort === "ASC" ? -1 : 1;
-            if (nameA > nameB) return selectedSort === "ASC" ? 1 : -1;
-            return 0;
-        });
-    }, [filteredData, selectedSort]);
-
-    const paginatedData = useMemo(() => {
-        const startIndex = (currentPage - 1) * itemsPerPage;
-        const endIndex = startIndex + itemsPerPage;
-        return sortedData.slice(startIndex, endIndex);
-    }, [sortedData, currentPage]);
-
-    
-    useEffect(() => {
-        const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-        if (currentPage > totalPages) {
-            setCurrentPage(totalPages || 1); // go to last page or 1 if no data
-        }
-    }, [filteredData, currentPage, itemsPerPage]);
-
-    
     if (loading) return <p className="text-gray-400 text-xl">Loading</p>;
 
     return (
@@ -193,9 +256,13 @@ function Employees() {
             <Card header={headerContent} radius="none" variant="admin" width="full">
                 <div className="flex flex-row space-x-7 font-inter text-xs border-b-1">
                     {tabList.map((tab, index) => (
-                        <Button 
+                        <Button
                             key={index}
-                            onClick={() => { setActiveTab(tab.toLowerCase()); setCurrentPage(1); }}
+                            onClick={() => { 
+                                setActiveTab(tab.toLowerCase()); 
+                                setCurrentPage(1); 
+                                setApi(tab.toLowerCase() === "employed" ? "employees" : "archive") 
+                            }}
                             className={`border-b-2 pb-2 ${activeTab === tab.toLowerCase() ? "border-current" : "border-transparent"}`}
                         >
                             {tab}
@@ -219,14 +286,14 @@ function Employees() {
                             >
                                 Previous
                             </Button>
-
-                            {Array.from({ length: totalPages }, (_, i) => (
+                            
+                            {pageNumbers.map((num) => (
                                 <Button
-                                    key={i}
-                                    onClick={() => setCurrentPage(i + 1)}
-                                    className={`px-2 py-1 rounded-md ${currentPage === i + 1 ? 'bg-black text-white' : 'bg-black/60 text-white'}`}
+                                    key={num}
+                                    onClick={() => setCurrentPage(num)}
+                                    className={`px-2 py-1 rounded-md ${currentPage === num ? 'bg-black text-white' : 'bg-black/60 text-white'}`}
                                 >
-                                    {i + 1}
+                                    {num}
                                 </Button>
                             ))}
 
@@ -243,7 +310,7 @@ function Employees() {
             </Card>
 
             <AddEmployeeModal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} pushData={pushData} />
-            <EditEmployeeModal isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} employeeId={selectedId} updateData={updateData} />
+            <ViewEmployeeModal isOpen={isViewOpen} onClose={() => setIsViewOpen(false)} employeeId={selectedId} updateData={updateData} api={api} />
         </>
     )
 }

@@ -29,8 +29,39 @@ export function archiveController(pool) {
             reply.status(500).send({ error: "Database query failed" });
         }
     };
+    
+    const getSingleArchiveEmployee = async (req, reply) => {
+        const { id } = req.params;
+        try {
+            // Fetch employee from archive
+            const empRes = await pool.query('SELECT * FROM employees_archive WHERE employee_id = $1', [id]);
+            if (empRes.rows.length === 0) return reply.status(404).send({ error: "Employee not found in archive" });
+            const employee = empRes.rows[0];
+
+            // Fetch dependent from archive
+            const depRes = await pool.query('SELECT * FROM employee_dependents_archive WHERE employee_id = $1', [id]);
+            const dependent = depRes.rows[0] || {};
+
+            // Return combined data
+            return reply.send({
+                ...employee,
+                emergency_name: dependent.fullname || null,
+                relationship: dependent.relationship || null,
+                emergency_address: dependent.address || null,
+                emergency_contact: dependent.contact || null,
+                city: dependent.city || null,
+                postal_code: dependent.postal_code || null,
+                gcash_no: dependent.gcash_no || null
+            });
+        } catch (err) {
+            console.error("Database Error:", err.message);
+            reply.status(500).send({ error: "Database query failed" });
+        }
+    };
+
 
     return {
         getAllArchives,
+        getSingleArchiveEmployee
     };
 }

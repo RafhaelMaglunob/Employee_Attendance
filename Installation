@@ -18,7 +18,6 @@ Frontend Installation
 
 Backend Installation
     npm install -g nodemon
-    npm install zod
     npm install fastify pg @fastify/cors
     npm install dotenv
     npm install googleapis pg node-cron

@@ -4,4 +4,5 @@ export async function archiveRoutes(fastify, options) {
     const controller = archiveController(fastify.pg);
 
     fastify.get("/archive", controller.getAllArchives);
+    fastify.get("/archive/:id", controller.getSingleArchiveEmployee);
 }
