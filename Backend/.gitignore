@@ -7,6 +7,10 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# --- JSON ---
+service-account.json
+Backend/service-account.json
+
 # --- Dependencies ---
 node_modules/
 Backend/node_modules/

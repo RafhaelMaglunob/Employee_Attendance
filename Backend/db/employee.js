@@ -1,8 +1,9 @@
 export async function createEmployeesTable(client) {
+    // Employees table
     await client.query(`
-        -- Employees table
         CREATE TABLE IF NOT EXISTS employees (
-            employee_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            employee_id TEXT PRIMARY KEY DEFAULT 
+                'TCBS' || TO_CHAR(NOW(), 'YYYY') || '-' || LPAD(nextval('employee_id_seq')::text, 4, '0')
             fullname VARCHAR(100),
             nickname VARCHAR(50),
             email VARCHAR(100),
@@ -22,26 +23,27 @@ export async function createEmployeesTable(client) {
         );
     `);
 
+    // Employee documents (with status)
     await client.query(`
-        -- Employees documents
-        CREATE TABLE IF NOT EXISTS employees_documents (
+        CREATE TABLE IF NOT EXISTS employee_documents (
             document_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-            employee_id UUID NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+            employee_id TEXT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
             sss_id VARCHAR(255),
             resume_cv VARCHAR(255),
             pagibig VARCHAR(255),
             philhealth VARCHAR(255),
             barangay_clearance VARCHAR(255),
+            status VARCHAR(20) DEFAULT 'Incomplete',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     `);
 
+    // Employee dependents
     await client.query(`
-        -- Employee dependents
-        CREATE TABLE IF NOT EXISTS employees_dependents (
+        CREATE TABLE IF NOT EXISTS employee_dependents (
             id SERIAL PRIMARY KEY,
-            employee_id UUID REFERENCES employees(employee_id) ON DELETE CASCADE,
+            employee_id TEXT REFERENCES employees(employee_id) ON DELETE CASCADE,
             fullname VARCHAR(100),
             relationship VARCHAR(50),
             address VARCHAR(150),

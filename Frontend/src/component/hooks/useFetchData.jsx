@@ -11,34 +11,32 @@ export function useFetchData(url, transform) {
             .then(res => res.json())
             .then(result => {
                 if (!isMounted) return;
-                setData(transform ? result.map(transform) : result);
-        })
-        .catch(err => console.error("Database Error:", err))
-        .finally(() => { if (isMounted) setLoading(false); });
+
+                // ✅ Make sure result.data exists and is an array
+                const items = Array.isArray(result.data) ? result.data : [];
+                setData(transform ? items.map(transform) : items);
+            })
+            .catch(err => console.error("Database Error:", err))
+            .finally(() => { if (isMounted) setLoading(false); });
 
         return () => { isMounted = false; };
     }, [url, transform]);
 
-    // ✅ Add
+    // ✅ Add new item
     const pushData = (item) => {
         const newItem = transform ? transform(item) : item;
         setData(prev => [...prev, newItem]);
     };
 
-    // ✅ Delete
+    // ✅ Delete item by key
     const deleteData = (id, key = "employee_id") => {
         setData(prev => prev.filter(item => item[key] !== id));
     };
 
-    // ✅ Update
+    // ✅ Update item by key
     const updateData = (updatedItem, key = "employee_id") => {
-        setData(prev =>
-            prev.map(item =>
-                item[key] === updatedItem[key]
-                ? (transform ? transform(updatedItem) : updatedItem)
-                : item
-            )
-        );
+        const newItem = transform ? transform(updatedItem) : updatedItem;
+        setData(prev => prev.map(item => item[key] === newItem[key] ? newItem : item));
     };
 
     return { data, loading, pushData, deleteData, updateData };

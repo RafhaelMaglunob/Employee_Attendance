@@ -4,6 +4,9 @@ import pkg from "pg";
 import cors from "@fastify/cors"
 import 'dotenv/config'
 
+import cron from 'node-cron'
+import { google } from "googleapis";
+
 import { createEmployeesTable } from "./db/employee.js";
 import { createArchiveTable } from "./db/archive.js";
 
@@ -12,6 +15,13 @@ import { archiveRoutes } from "./routes/archiveRoute.js";
 
 const { Pool } = pkg;
 const fastify = Fastify();
+
+
+const auth = new google.auth.GoogleAuth({
+  scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+});
+
+const drive = google.drive({ version: "v3", auth });
 
 // ✅ PostgreSQL connection pool
 const pool = new Pool({

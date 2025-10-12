@@ -1,8 +1,8 @@
 export async function createArchiveTable(client) {
-    // Employees archive
+    // Archive Employees
     await client.query(`
         CREATE TABLE IF NOT EXISTS employees_archive (
-            employee_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            employee_id TEXT PRIMARY KEY,
             fullname VARCHAR(100),
             nickname VARCHAR(50),
             email VARCHAR(100),
@@ -22,26 +22,27 @@ export async function createArchiveTable(client) {
         );
     `);
 
-    // Employees documents archive
+    // Archive Employee Documents
     await client.query(`
-        CREATE TABLE IF NOT EXISTS employees_documents_archive (
+        CREATE TABLE IF NOT EXISTS employee_documents_archive (
             document_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-            employee_id UUID NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+            employee_id TEXT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
             sss_id VARCHAR(255),
             resume_cv VARCHAR(255),
             pagibig VARCHAR(255),
             philhealth VARCHAR(255),
             barangay_clearance VARCHAR(255),
+            status VARCHAR(20) DEFAULT 'Incomplete',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     `);
 
-    // Employee dependents archive
+    // Archive Employee Dependents
     await client.query(`
-        CREATE TABLE IF NOT EXISTS employees_dependents_archive (
+        CREATE TABLE IF NOT EXISTS employee_dependents_archive (
             id SERIAL PRIMARY KEY,
-            employee_id UUID REFERENCES employees(employee_id) ON DELETE CASCADE,
+            employee_id TEXT REFERENCES employees(employee_id) ON DELETE CASCADE,
             fullname VARCHAR(100),
             relationship VARCHAR(50),
             address VARCHAR(150),
@@ -52,5 +53,5 @@ export async function createArchiveTable(client) {
         );
     `);
 
-    console.log("✅ Employees archive tables ready");
+    console.log("✅ Archive tables ready");
 }

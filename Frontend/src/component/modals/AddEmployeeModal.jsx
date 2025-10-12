@@ -35,7 +35,7 @@ export default function AddEmployeeModal({ isOpen, onClose, pushData }) {
                 { name: "emergency_name", label: "Full Name *" },
                 { name: "relationship", label: "Relationship *" },
                 { name: "emergency_address", label: "Address *" },
-                { name: "emergency_contact", label: "Contact No." },
+                { name: "emergency_contact", label: "Contact No."} ,
                 { name: "city", label: "City *" },
                 { name: "postal_code", label: "Postal Code *" },
                 { name: "gcash_no", label: "Gcash No." },
