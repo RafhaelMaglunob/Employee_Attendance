@@ -1,0 +1,20 @@
+{
+  
+  "type": "module",
+  
+  "dependencies": {
+  
+    
+  "@fastify/cors": "^11.1.0",
+  
+    
+  "dotenv": "^17.2.3",
+  
+    
+  "fastify": "^5.6.1",
+  
+    
+  "pg": "^8.16.3"
+  
+  }
+}

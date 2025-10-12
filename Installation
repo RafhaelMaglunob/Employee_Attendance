@@ -1,0 +1,22 @@
+Create 2 Folder (Frontend, Backend)
+
+Frontend Installation
+    {*If there is no project*} 
+        npm create vite@latest . -- -- template react 
+        npm install
+    (*Else*)
+    npm install tailwindcss @tailwindcss/vite
+    npm install react-router-dom
+    npm clsx
+    npm install @fontsource/inter
+    npm install @heroicons/react
+
+    {/*Test*/}
+    npm install --save-dev jest @testing-library/react @testing-library/jest-dom (optional)
+    npm install --save-dev @babel/preset-env @babel/preset-react
+    npm install --save-dev jest-environment-jsdom
+
+Backend Installation
+    npm install -g nodemon
+    npm install fastify pg @fastify/cors
+    npm install dotenv
