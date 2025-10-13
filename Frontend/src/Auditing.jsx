@@ -8,8 +8,6 @@ import { useFetchData } from './component/hooks/useFetchData'
 import { applySearchAndFilter } from './component/utils/applySearchFilter';
 import { exportTableToWord } from './component/utils/exportableWord'
 
-const columns = ["Action", "Employee", "Timestamp", "Details"]
-
 function Auditing() {
     const savedSort = localStorage.getItem("employeeSort") || "Filter";
     
@@ -31,12 +29,14 @@ function Auditing() {
         `http://localhost:3001/api/audit`,
         transformEmployee
     );
+
     const columns = [
         { key: "action", title: "Action" },
         { key: "name", title: "Employee" },
         { key: "action_stamp", title: "Timestamp" },
         { key: "remarks", title: "Details" },
     ]
+    
     const filteredData = useMemo(() => {
         let tempData = applySearchAndFilter(data, query, ["action", "name", "action_stamp", "remarks"], "", "");
 

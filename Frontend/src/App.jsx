@@ -9,6 +9,7 @@ import Scheduling from './Scheduling.jsx'
 import Attendance from './Attendance.jsx'
 import Approval from './Approval.jsx'
 import Auditing from './Auditing.jsx';
+import Salary from './Salary.jsx';
 
 import { Button } from './component/ui/button.jsx'
 import { Sidebar } from './component/layout/Container.jsx'
@@ -20,7 +21,7 @@ const sidebar = [
   {name: "Dashboard", src: "../img/Dashboard_Icon.png", alt:"Dashboard Icon", path: "dashboard"},
   {name: "Employees", src: "../img/Employees_Icon.png", alt:"Employees Icon", path: "employee"},
   {name: "Auditing", src: "../img/Auditing_Icon.png", alt:"Auditing Icon", path: "audit"},
-  {name: "Salary", src: "../img/Salary_Icon.png", alt:"Salary Icon", path: "Salary"},
+  {name: "Salary", src: "../img/Salary_Icon.png", alt:"Salary Icon", path: "salary"},
   {name: "Incidents", src: "../img/Incidents_Icon.png", alt:"Incidents Icon", path: "incident"},
   {name: "Reports", src: "../img/Reports_Icon.png", alt:"Reports Icon", path: "report"},
 
@@ -101,6 +102,7 @@ function App() {
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/employee" element={<Employees />} />
                 <Route path="/audit" element={<Auditing />} />
+                <Route path="/salary" element={<Salary />} />
                 <Route path="/schedule" element={<Scheduling />} />
                 <Route path="/attendance" element={<Attendance />} />
                 <Route path="/approval" element={<Approval />} />

@@ -17,7 +17,7 @@ export function Filter({ value, onChange, className, noIcon = false, sortable = 
             </div>
 
             {open && (
-                <div className="absolute top-full left-0 w-full mt-1 px-2 py-1 bg-white rounded-md shadow-md border border-gray-200 z-10">
+                <div className="absolute top-full left-0 w-full mt-1 px-2 py-1 bg-white rounded-md shadow-md border border-gray-200 z-10 max-h-40 overflow-y-auto">
                     {children}
                 </div>
             )}
