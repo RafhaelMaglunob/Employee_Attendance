@@ -7,12 +7,15 @@ import { Card } from './component/ui/card';
 import { Button } from './component/ui/button';
 import { Filter } from './component/ui/filter';
 import { useFetchData } from './component/hooks/useFetchData';
+
 import AddEmployeeModal from './component/modals/AddEmployeeModal';
 import ViewEmployeeModal from './component/modals/viewEmployeeModal';
+import DeleteEmployeeModal from './component/modals/deleteEmployeeModal';
+import RetrieveEmployeeModal from './component/modals/retrieveEmployeeModal';
 
 const tabList = ["Employed", "Archive"];
 
-const getActionButtons = (row, activeTab, handleView, handleDocuments, handleDelete) => {
+const getActionButtons = (row, activeTab, handleView, handleDocuments, handleDelete, handleRetrieve) => {
     if (activeTab === "employed") {
         return [
             {
@@ -28,7 +31,7 @@ const getActionButtons = (row, activeTab, handleView, handleDocuments, handleDel
             {
                 img: "../img/Delete_Icon.png",
                 alt: "Delete Icon",
-                onClick: () => handleDelete(row.employee_id)
+                onClick: () => handleDelete(row)
             }
         ];
     } else if (activeTab === "archive") {
@@ -36,7 +39,7 @@ const getActionButtons = (row, activeTab, handleView, handleDocuments, handleDel
             {
                 img: "../img/Edit_Icon.png",
                 alt: "View Icon",
-                onClick: () => handleView(row)
+                onClick: () => handleRetrieve(row)
             }
         ];
     }
@@ -44,35 +47,52 @@ const getActionButtons = (row, activeTab, handleView, handleDocuments, handleDel
 };
 
 function Employees() {
+    const savedTab = (localStorage.getItem("employeeTab") || "employed").toLowerCase();
+    const savedPage = parseInt(localStorage.getItem("employeePage") || "1", 10);
+    const savedSort = (localStorage.getItem("employeeSort") || "Filter");
+
     const itemsPerPage = 5; 
-    const [api, setApi] = useState("employees");
     const [query, setQuery] = useState("");
-    const [activeTab, setActiveTab] = useState("employed");
-    const [selectedSort, setSelectedSort] = useState("ASC");
-    const [currentPage, setCurrentPage] = useState(1);
+    const [activeTab, setActiveTab] = useState(savedTab);
+    const [currentPage, setCurrentPage] = useState(savedPage);
+    const [api, setApi] = useState(activeTab.toLowerCase() === "employed" ? "employees" : "archive");
+    const [selectedSort, setSelectedSort] = useState(savedSort);
     const [selectedId, setSelectedId] = useState(null);
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [isViewOpen, setIsViewOpen] = useState(false);
+    const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+    const [isRetrieveOpen, setIsRetrieveOpen] = useState(false);
+    
+    useEffect(() => {
+        localStorage.setItem("employeeSort", selectedSort)
+    }, [selectedSort])
+
+    useEffect(() => {
+        localStorage.setItem("employeeTab", activeTab)
+    }, [activeTab])
+
+    const handlePageChange = (page) => {
+        setCurrentPage(page);
+        localStorage.setItem("employeePage", page);
+    };
 
     const handleView = (row) => {
         setSelectedId(row.employee_id);
         setIsViewOpen(true);
     };
 
+    const handleRetrieve = (row) => {
+        setSelectedId(row.employee_id);
+        setIsRetrieveOpen(true);
+    };
+
     const handleDocuments = (row) => {
         // Implement if needed
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this employee?")) return;
-        try {
-            const res = await fetch(`http://localhost:3001/api/${api}/${id}`, { method: "DELETE" });
-            if (!res.ok) throw new Error("Delete failed");
-            await res.json();
-            updateData(prev => prev.filter(emp => emp.employee_id !== id));
-        } catch (err) {
-            console.error("Failed to delete employee:", err);
-        }
+    const handleDelete = async (row) => {
+        setSelectedId(row.employee_id);
+        setIsDeleteOpen(true);
     };
 
     const transformEmployee = (emp) => ({
@@ -130,7 +150,7 @@ function Employees() {
             key: "actions",
             title: "Actions",
             render: (row) => {
-                const buttons = getActionButtons(row, activeTab.toLowerCase(), handleView, handleDocuments, handleDelete);
+                const buttons = getActionButtons(row, activeTab.toLowerCase(), handleView, handleDocuments, handleDelete, handleRetrieve);
                 return (
                     <div className="flex gap-2">
                         {buttons.map((btn, idx) => (
@@ -203,11 +223,13 @@ function Employees() {
     const pageNumbers = getPageNumbers(currentPage, totalPages, 5);
     
     useEffect(() => {
-        const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-        if (currentPage > totalPages) {
-            setCurrentPage(totalPages || 1);
+        if (!loading) { // only run after data is loaded
+            const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+            if (currentPage > totalPages) {
+                setCurrentPage(totalPages || 1);
+            }
         }
-    }, [filteredData, currentPage, itemsPerPage]);
+    }, [filteredData, currentPage, itemsPerPage, loading]);
 
     const handleAddEmployee = () => setIsAddOpen(true);
 
@@ -242,7 +264,7 @@ function Employees() {
     if (loading) return <p className="text-gray-400 text-xl">Loading</p>;
 
     return (
-        <>
+        <div className="pb-6">
             <div className="flex flex-row justify-between mr-3 mb-3 mt-3">
                 <h1 className="font-bold text-2xl">Employee Records</h1>
                 <Button 
@@ -259,10 +281,12 @@ function Employees() {
                         <Button
                             key={index}
                             onClick={() => { 
-                                setActiveTab(tab.toLowerCase()); 
-                                setCurrentPage(1); 
-                                setApi(tab.toLowerCase() === "employed" ? "employees" : "archive") 
-                            }}
+                                const lowerTab = tab.toLowerCase();
+                                setActiveTab(lowerTab);
+                                localStorage.setItem("employeeTab", lowerTab);
+                                setCurrentPage(1);
+                                setApi(lowerTab === "employed" ? "employees" : "archive");
+                             }}
                             className={`border-b-2 pb-2 ${activeTab === tab.toLowerCase() ? "border-current" : "border-transparent"}`}
                         >
                             {tab}
@@ -280,7 +304,7 @@ function Employees() {
 
                         <div className="flex flex-row space-x-1 items-center">
                             <Button 
-                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                onClick={() => handlePageChange(Math.max(currentPage - 1, 1))}
                                 disabled={currentPage === 1}
                                 className="bg-black text-white rounded-md px-4 py-1 text-sm"
                             >
@@ -290,7 +314,7 @@ function Employees() {
                             {pageNumbers.map((num) => (
                                 <Button
                                     key={num}
-                                    onClick={() => setCurrentPage(num)}
+                                    onClick={() => handlePageChange(num)}
                                     className={`px-2 py-1 rounded-md ${currentPage === num ? 'bg-black text-white' : 'bg-black/60 text-white'}`}
                                 >
                                     {num}
@@ -298,7 +322,7 @@ function Employees() {
                             ))}
 
                             <Button 
-                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                onClick={() => handlePageChange(Math.min(currentPage + 1, totalPages))}
                                 disabled={currentPage === totalPages}
                                 className="bg-black text-white rounded-md px-4 py-1 text-sm"
                             >
@@ -311,7 +335,9 @@ function Employees() {
 
             <AddEmployeeModal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} pushData={pushData} />
             <ViewEmployeeModal isOpen={isViewOpen} onClose={() => setIsViewOpen(false)} employeeId={selectedId} updateData={updateData} api={api} />
-        </>
+            <DeleteEmployeeModal isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} employeeId={selectedId} updateData={updateData} api={api} />
+            <RetrieveEmployeeModal isOpen={isRetrieveOpen} onClose={() => setIsRetrieveOpen(false)} employeeId={selectedId} updateData={updateData} api={api} />
+        </div>
     )
 }
 

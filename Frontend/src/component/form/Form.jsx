@@ -60,6 +60,7 @@ export function Form({
                                                     defaultValue={subField.defaultValue || ""}
                                                     required={subField.required ?? true}
                                                     className={`
+                                                        ${field.disabled ? "appearance-none" : "cursor-pointer"}
                                                         w-full bg-white border border-gray-300 rounded-lg px-3 h-9 focus:outline-none focus:ring-2 focus:ring-blue-500
                                                     `}
                                                 >
@@ -101,7 +102,9 @@ export function Form({
                                     disabled={field.disabled}
                                     defaultValue={field.defaultValue || ""}
                                     required={field.required ?? true}
-                                    className="w-full bg-white border border-gray-300 rounded-lg px-3 h-9 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className={`
+                                        ${field.disabled ? "appearance-none" : "cursor-pointer"} 
+                                        w-full bg-white border border-gray-300 rounded-lg px-3 h-9 focus:outline-none focus:ring-2 focus:ring-blue-500`}
                                 >
                                     {field.options?.map((opt, i) => (
                                         <option key={i} value={opt}>{opt}</option>
@@ -136,12 +139,16 @@ export function Form({
                             {cancelText || "Cancel"}
                         </Button>
                     )}
-                    <Button
-                        type="submit"
-                        className="px-4 py-1 border border-black rounded-lg bg-black text-white hover:bg-black/60"
-                    >
-                        {submitText}
-                    </Button>
+                    {submitText &&
+                        <Button
+                            type="submit"
+                            className={`
+                                px-4 py-1 border border-black rounded-lg bg-black text-white hover:bg-black/60
+                            `}
+                        >
+                            {submitText}
+                        </Button>
+                    }
                 </div>
             </form>
         </div>

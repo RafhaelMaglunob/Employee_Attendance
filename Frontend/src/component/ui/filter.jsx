@@ -1,17 +1,17 @@
 import { useState } from 'react'
 
 
-export function Filter({ value, onChange, className, sortable = false, children }) {
+export function Filter({ value, onChange, className, noIcon = false, sortable = false, children }) {
     const [open, setOpen] = useState(false);
 
     return (
         <div
-            className={`relative flex items-center align-center bg-white rounded-md px-3 gap-2 border border-gray-300 cursor-pointer ${className || ""}`}
+            className={`relative flex items-center items-center bg-white rounded-md px-3 gap-2 border border-gray-300 cursor-pointer ${className || ""}`}
             onClick={() => setOpen(!open)}
         >
             <div className="py-2 flex flex-row space-x-3">
-                <img src="../../../img/Filter_Icon.png" alt="Filter" className="w-4 h-4" />
-                <span className="text-sm text-gray-800 w-full hidden sm:flex">
+                {!noIcon && <img src="../../../img/Filter_Icon.png" alt="Filter" className="w-4 h-4" />}
+                <span className={`text-sm text-gray-800 w-full ${!noIcon ? "hidden sm:flex" : ""}`}>
                     {value || "Filter"}
                 </span>
             </div>

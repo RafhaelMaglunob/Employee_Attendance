@@ -1,6 +1,9 @@
 -- Connect as postgres
 -- psql -U postgres
 
+--Check the current employee_id value
+--SELECT nextval('employee_id_seq');
+
 -- Create database
 CREATE DATABASE employee_attendance;
 \c employee_attendance
@@ -13,7 +16,8 @@ CREATE SEQUENCE employee_id_seq START 1;
 
 -- Employees table
 CREATE TABLE employees (
-    employee_id TEXT PRIMARY KEY DEFAULT 'TCBS' || LPAD(nextval('employee_id_seq')::text, 4, '0'),
+    employee_id TEXT PRIMARY KEY DEFAULT 
+        'TCBS' || TO_CHAR(NOW(), 'YYYY') || '-' || LPAD(nextval('employee_id_seq')::text, 4, '0'),
     fullname VARCHAR(100),
     nickname VARCHAR(50),
     email VARCHAR(100),
@@ -106,3 +110,9 @@ CREATE TABLE employee_dependents_archive (
     postalcode VARCHAR(10),
     gcash_number VARCHAR(20)
 );
+
+ALTER TABLE employees ADD CONSTRAINT unique_email UNIQUE(email);
+ALTER TABLE employees ADD CONSTRAINT unique_fullname UNIQUE(fullname);
+ALTER TABLE employees ADD COLUMN effective_deletion_date DATE;
+ALTER TABLE employees_archive ADD CONSTRAINT unique_employee_archive_row UNIQUE (employee_id, fullname, email);
+

@@ -1,12 +1,15 @@
+import { Table } from "../data/table";
 import { Form } from "../form/Form";
 import { ModalContainer } from "../ui/modal";
 import { useState, useEffect } from "react";
 
-export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateData, api }) {
+const columns = ["Start of Contract", "End of Contract"]
+
+export default function RetrieveEmployeeModal({ isOpen, onClose, employeeId, updateData, api }) {
     const [employee, setEmployee] = useState(null);
     const [error, setError] = useState("");
     const [readOnly, setReadOnly] = useState(true);
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
     // Fetch employee
     useEffect(() => {
@@ -80,35 +83,19 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
         },
     ];
 
-    const handleSubmit = async (formData) => {
-        if (readOnly) {
-            setReadOnly(false);
-            return;
-        }
-
+    const handleRetrieve = async () => {
         if (isSubmitting) return;
         setIsSubmitting(true);
-
         try {
-            const res = await fetch(`http://localhost:3001/api/${api}/${employeeId}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(formData),
-            });
-
-            const updated = await res.json();
-            if (!res.ok) {
-                setError(updated.message || updated.error || "Failed to add employee");
-                return;
-            }
-            
-            setEmployee(updated);
-
-            if (typeof updateData === "function") updateData(updated);
-
-            setReadOnly(true);
+            const res = await fetch(`http://localhost:3001/api/${api}/${employeeId}?status=Employed`,{ 
+                method: "DELETE",
+            }); 
+            if (!res.ok) throw new Error("Delete failed");
+            await res.json();
+            updateData(prev => prev.filter(emp => emp.employee_id !== employeeId));
+            onClose();
         } catch (err) {
-            console.error(err);
+            console.error("Failed to delete employee:", err);
         } finally {
             setIsSubmitting(false);
         }
@@ -120,22 +107,16 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
     }
 
     return (
-        <ModalContainer title={readOnly ? "View Employee" : "Edit Employee"} width="3xl" variant="admin">
+        <ModalContainer title={readOnly ? "View Employee" : "Retrieve Employee"} width="3xl" variant="admin">
             <Form
                 fields={fields}
-                onSubmit={handleSubmit}
-                submitText={api.toLowerCase() !== "archive" ? (readOnly ? "Edit" : "Save Changes") : ""}
-                cancelText={readOnly ? "Close" : "Cancel"}
+                onSubmit={handleRetrieve}
+                submitText={"Retrieve"}
+                cancelText={"Close"}
                 errorText={error}
-                onCancel={() => {
-                    if(readOnly){
-                        handleClose()
-                    } else {
-                        setReadOnly(true)
-                    }
-
-                }}
+                onCancel={handleClose}
             />
+            <Table columns={columns}></Table>
         </ModalContainer>
     );
 }

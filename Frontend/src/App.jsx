@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { useState } from 'react'
 
 import './App.css'
@@ -8,6 +8,7 @@ import Employees from './Employees.jsx'
 import Scheduling from './Scheduling.jsx'
 import Attendance from './Attendance.jsx'
 import Approval from './Approval.jsx'
+import Auditing from './Auditing.jsx';
 
 import { Button } from './component/ui/button.jsx'
 import { Sidebar } from './component/layout/Container.jsx'
@@ -27,7 +28,6 @@ const sidebar = [
   {name: "Scheduling", src: "../img/Schedule_Icon.png", alt:"Schedule Icon", path: "schedule"},
   {name: "Attendance", src: "../img/Attendance_Icon.png", alt:"Attendance Icon", path: "attendance"},
   {name: "Approvals", src: "../img/Approval_Icon.png", alt:"Approvals Icon", path: "approval"},
-
 ]
 
 function App() {
@@ -35,12 +35,12 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   return (
     <Router>
-      <div className="flex">
+      <div className="flex overflow-x-hidden w-[100%] relative">
         {/*Sidebar*/}
         <Sidebar
           className={`
             fixed sm:sticky top-0 left-0 flex flex-col bg-[#FFC629] font-inter
-            h-screen z-40 transform transition-transform duration-300
+            z-40 transform transition-transform duration-300
             w-56 sm:w-64
             ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} 
             sm:translate-x-0 sm:flex flex-col items-start space-y-1 overflow-y-auto
@@ -97,8 +97,10 @@ function App() {
           
           <div className="flex-1 sm:border-l-8 sm:border-l-[#5E451D] border-r-0 border-b-0 px-3 py-1">
               <Routes>
+                <Route path="/" element={<Dashboard />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/employee" element={<Employees />} />
+                <Route path="/audit" element={<Auditing />} />
                 <Route path="/schedule" element={<Scheduling />} />
                 <Route path="/attendance" element={<Attendance />} />
                 <Route path="/approval" element={<Approval />} />

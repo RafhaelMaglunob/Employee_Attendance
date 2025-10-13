@@ -37,28 +37,6 @@ export function employeeController(pool) {
         try {
             await client.query('BEGIN');
 
-            const ifNameExist = await client.query(`
-                SELECT email FROM employees WHERE fullname=$1
-                UNION
-                SELECT email FROM employees_archive WHERE fullname=$1
-            `, [fullname])
-                
-            if (ifNameExist.rowCount > 0) {
-                await client.query('ROLLBACK');
-                return reply.status(400).send({ message: "Name already exists" });
-            }
-
-            const ifEmailExist = await client.query(`
-                SELECT email FROM employees WHERE email=$1
-                UNION
-                SELECT email FROM employees_archive WHERE email=$1
-            `, [email])
-
-            if (ifEmailExist.rowCount > 0) {
-                await client.query('ROLLBACK');
-                return reply.status(400).send({ message: "Email already exists" });
-            }
-
             const empRes = await client.query(`
                 INSERT INTO employees 
                 (fullname, nickname, email, position, employment_type, status, gender, contact, marital_status, birthday, address, sss_number, pagibig, philhealth)
@@ -79,6 +57,14 @@ export function employeeController(pool) {
             return { success: true, employee };
         } catch (err) {
             await client.query('ROLLBACK');
+            if(err.code === "23505"){
+                if(err.constraint === "unique_fullname") {
+                    return reply.status(400).send({ message: "Name already exists"})
+                } 
+                else if (err.constraint === "unique_email") {
+                    return reply.status(400).send({ message: "Email already exists" })
+                }
+            } 
             console.error("Insert Error:", err.message);
             reply.status(500).send({ error: "Failed to add employee" });
         } finally {
@@ -124,27 +110,6 @@ export function employeeController(pool) {
 
         try {
             await client.query('BEGIN');
-            const ifNameExist = await client.query(`
-                SELECT * FROM employees WHERE fullname = $1
-                UNION
-                SELECT * FROM employees_archive WHERE fullname = $1
-            `, [fullname])
-
-            if(ifNameExist.rowCount > 0) {
-                await client.query('ROLLBACK')
-                return reply.status(400).send({ message: "Name is already exist"})
-            } 
-
-            const ifEmailExist = await client.query(`
-                SELECT * FROM employees WHERE email = $1
-                UNION
-                SELECT * FROM employees_archive WHERE email = $1
-            `, [email])
-
-            if(ifEmailExist.rowCount > 0) {
-                await client.query('ROLLBACK')
-                return reply.status(400).send({ message: "Email is already exist"})
-            }
 
             const empRes = await client.query(`
                 UPDATE employees
@@ -169,6 +134,14 @@ export function employeeController(pool) {
             reply.send({ success: true, employee: updatedEmployee });
         } catch (err) {
             await client.query('ROLLBACK');
+            if(err.code === "23505"){
+                if(err.constraint === "unique_fullname") {
+                    return reply.status(400).send({ message: "Name already exists"})
+                } 
+                else if (err.constraint === "unique_email") {
+                    return reply.status(400).send({ message: "Email already exists" })
+                }
+            } 
             console.error("Update Error:", err.message);
             reply.status(500).send({ error: "Failed to update employee" });
         } finally {
@@ -178,50 +151,49 @@ export function employeeController(pool) {
 
     const deleteEmployee = async (req, reply) => {
         const { id } = req.params;
+        const { status, deletionDate } = req.query;
+
+        if (!status) { 
+            return reply.status(400).send({ error: "Missing status" });
+        }
+        if (!deletionDate || isNaN(new Date(deletionDate))) {
+            return reply.status(400).send({ error: "Invalid deletionDate" });
+        }
+
+        const client = await pool.connect();
+
         try {
-            const client = await pool.connect();
-            
-            // Archive employee
-            await client.query(`
-                INSERT INTO employees_archive (
-                    employee_id, fullname, nickname, email, position, employment_type, status, gender, contact,
-                    birthday, marital_status, address, sss_number, pagibig, philhealth, emergency_name,
-                    relationship, emergency_address, emergency_contact, city, postal_code, gcash_no
-                )
-                SELECT 
-                    employee_id, fullname, nickname, email, position, employment_type, status, gender, contact,
-                    birthday, marital_status, address, sss_number, pagibig, philhealth, emergency_name,
-                    relationship, emergency_address, emergency_contact, city, postal_code, gcash_no
-                FROM employees WHERE employee_id = $1
-            `, [id]);
+            await client.query('BEGIN');
 
-            // Archive dependents
-            await client.query(`
-                INSERT INTO employee_dependents_archive (
-                    dependent_id, employee_id, name, relationship, birthdate, contact
-                )
-                SELECT dependent_id, employee_id, name, relationship, birthdate, contact
-                FROM employee_dependents WHERE employee_id = $1
-            `, [id]);
+            // Check if employee exists
+            const res = await client.query(
+                'SELECT * FROM employees WHERE employee_id = $1', [id]
+            );
+            if (res.rowCount === 0) {
+                await client.query('ROLLBACK');
+                return reply.status(404).send({ error: 'Employee not found in database' });
+            }
 
-            // Archive documents
-            await client.query(`
-                INSERT INTO employee_documents_archive (
-                    document_id, employee_id, sss_id, resume_cv, pagibig, philhealth, barangay_clearance
-                )
-                SELECT document_id, employee_id, sss_id, resume_cv, pagibig, philhealth, barangay_clearance
-                FROM employee_documents WHERE employee_id = $1
-            `, [id]);
-            await client.query("DELETE FROM employees WHERE employee_id = $1", [id]);
-            client.release();
-            
-            reply.send({ message: `Employee ${id} archived and deleted successfully` });
+            // Just update effective deletion date
+            await client.query(
+                'UPDATE employees SET effective_deletion_date = $1 WHERE employee_id = $2',
+                [deletionDate, id]
+            );
+
+            await client.query('COMMIT');
+            reply.send({ message: `Employee ${id} scheduled for deletion on ${deletionDate}` });
         } catch (err) {
+            await client.query('ROLLBACK');
             console.error(err);
-            reply.status(500).send({ error: "Failed to delete employee" });
+            reply.status(500).send({ error: "Failed to schedule employee deletion" });
+        } finally {
+            client.release();
         }
     };
 
+
+
+    
     return {
         getAllEmployees,
         addEmployee,

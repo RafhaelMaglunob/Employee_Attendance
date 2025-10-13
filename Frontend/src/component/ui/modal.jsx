@@ -4,8 +4,9 @@ import clsx from "clsx";
 import { Card } from "./card";
 
 export function ModalContainer({ 
-    title, 
+    title,
     footerText = "", 
+    titleSize,
     onClose,
     variant,
     children, 
@@ -28,6 +29,7 @@ export function ModalContainer({
             <div className={clsx("max-h-[80vh] overflow-y-auto w-full p-4", widthClasses[width])}>
                 <Card
                     title={title}
+                    titleSize={titleSize}
                     variant={variant}
                     radius="none"
                     hasButton={!!footerText}

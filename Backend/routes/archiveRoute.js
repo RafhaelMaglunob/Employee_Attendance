@@ -5,4 +5,5 @@ export async function archiveRoutes(fastify, options) {
 
     fastify.get("/archive", controller.getAllArchives);
     fastify.get("/archive/:id", controller.getSingleArchiveEmployee);
+    fastify.delete("/archive/:id", controller.retrieveEmployee)
 }

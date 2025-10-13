@@ -14,8 +14,18 @@ const variants = {
   },
 }
 
+const titleSizes = {
+  sm: "text-sm",
+  md: "text-md",
+  lg: "text-lg",
+  xl: "text-xl",
+  "2xl": "text-xl",
+  "3xl": "text-2xl"
+}
+
 export function Card({
   title,
+  titleSize,
   variant = "default",
   radius = "lg",
   header,
@@ -41,7 +51,7 @@ export function Card({
           variants[variant].title,
           "px-4 py-2 border-b bg-gray-100 w-full"
           )}>
-          {title && <h2 className="text-sm font-semibold mb-1">{title}</h2>}
+          {title && <h2 className={`${titleSizes[titleSize] || "text-sm"} font-semibold mb-1`}>{title}</h2>}
           {header}
         </div>
       )}

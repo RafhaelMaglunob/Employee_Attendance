@@ -59,9 +59,74 @@ export function archiveController(pool) {
         }
     };
 
+    const retrieveEmployee = async (req, reply) => {
+        const { id } = req.params;
+        const { status } = req.query;
+
+        if (!status) { 
+            return reply.status(400).send({ error: "Missing status" });
+        }
+        
+        const client = await pool.connect();
+        
+        try {
+            await client.query('BEGIN');
+            const res = await client.query(
+                'SELECT 1 FROM employees_archive WHERE employee_id = $1', [id]
+            );
+            if (res.rowCount === 0) {
+                await client.query('ROLLBACK');
+                return reply.status(404).send({ error: 'Employee not found in archive' });
+            }
+
+            // Archive employee
+            await client.query(`
+                INSERT INTO employees (
+                    employee_id, fullname, nickname, email, position, employment_type, status, gender, contact,
+                    birthday, marital_status, address, sss_number, pagibig, philhealth
+                )
+                SELECT 
+                    employee_id, fullname, nickname, email, position, employment_type, $1, gender, contact,
+                    birthday, -- already DATE, no conversion needed
+                    marital_status, address, sss_number, pagibig, philhealth
+                FROM employees_archive
+                WHERE employee_id = $2;
+
+            `, [status, id]);
+            
+            await client.query(`
+                INSERT INTO employee_dependents (
+                    employee_id, fullname, relationship, address, contact, city, postalcode, gcash_number
+                ) 
+                SELECT employee_id, fullname, relationship, address, contact, city, postalcode, gcash_number
+                FROM employee_dependents_archive WHERE employee_id = $1
+            `, [id])
+
+            // Archive documents
+            await client.query(`
+                INSERT INTO employee_documents (
+                    document_id, employee_id, sss_id, resume_cv, pagibig, philhealth, barangay_clearance
+                )
+                SELECT document_id, employee_id, sss_id, resume_cv, pagibig, philhealth, barangay_clearance
+                FROM employee_documents_archive WHERE employee_id = $1
+            `, [id]);
+            
+            await client.query("DELETE FROM employees_archive WHERE employee_id = $1", [id]);
+
+            await client.query('COMMIT');
+            reply.send({ message: `Employee ${id} data retrieved successfully` });
+        } catch (err) {
+            await client.query('ROLLBACK');
+            console.error(err);
+            reply.status(500).send({ error: "Failed to retrieve employee" });
+        } finally {
+            client.release();
+        }
+    };
 
     return {
         getAllArchives,
-        getSingleArchiveEmployee
+        getSingleArchiveEmployee,
+        retrieveEmployee,
     };
 }
