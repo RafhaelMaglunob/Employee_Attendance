@@ -12,6 +12,7 @@ import { createArchiveTable } from "./db/archive.js";
 
 import { employeeRoutes } from "./routes/employeeRoute.js";
 import { archiveRoutes } from "./routes/archiveRoute.js";
+import { logRoutes } from "./routes/logRoute.js";
 
 const { Pool } = pkg;
 const fastify = Fastify();
@@ -65,6 +66,7 @@ fastify.get("/", async (req, res) => {
 
 fastify.register( employeeRoutes, {prefix: "/api"} )
 fastify.register( archiveRoutes, {prefix: "/api"} )
+fastify.register( logRoutes, {prefix: "/api"} )
 
 cron.schedule('* * * * *', async () => { // runs every day at midnight
     const client = await pool.connect();

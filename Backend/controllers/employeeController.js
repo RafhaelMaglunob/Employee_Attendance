@@ -176,9 +176,10 @@ export function employeeController(pool) {
 
             // Just update effective deletion date
             await client.query(
-                'UPDATE employees SET effective_deletion_date = $1 WHERE employee_id = $2',
-                [deletionDate, id]
+                'UPDATE employees SET effective_deletion_date = $1, deletion_status = $2 WHERE employee_id = $3',
+                [deletionDate, status, id]
             );
+
 
             await client.query('COMMIT');
             reply.send({ message: `Employee ${id} scheduled for deletion on ${deletionDate}` });

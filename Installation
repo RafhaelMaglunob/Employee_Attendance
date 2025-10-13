@@ -10,6 +10,10 @@ Frontend Installation
     npm clsx
     npm install @fontsource/inter
     npm install @heroicons/react
+    npm install html2canvas
+    npm install docx file-saver
+
+
 
     {/*Test*/}
     npm install --save-dev jest @testing-library/react @testing-library/jest-dom (optional)

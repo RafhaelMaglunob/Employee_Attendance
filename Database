@@ -110,9 +110,30 @@ CREATE TABLE employee_dependents_archive (
     postalcode VARCHAR(10),
     gcash_number VARCHAR(20)
 );
+CREATE TABLE employee_dependents_archive (
+    id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees(employee_id) ON DELETE CASCADE,
+    fullname VARCHAR(100),
+    relationship VARCHAR(50),
+    address VARCHAR(150),
+    contact VARCHAR(20),
+    city VARCHAR(50),
+    postalcode VARCHAR(10),
+    gcash_number VARCHAR(20)
+);
+
+CREATE TABLE audit_logs (
+    log_id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees(employee_id),
+    employee_name VARCHAR(100),
+    action VARCHAR(255) NOT NULL,
+    action_time TIMESTAMP DEFAULT NOW(),
+    remarks TEXT
+);
+
 
 ALTER TABLE employees ADD CONSTRAINT unique_email UNIQUE(email);
 ALTER TABLE employees ADD CONSTRAINT unique_fullname UNIQUE(fullname);
 ALTER TABLE employees ADD COLUMN effective_deletion_date DATE;
 ALTER TABLE employees_archive ADD CONSTRAINT unique_employee_archive_row UNIQUE (employee_id, fullname, email);
-
+ALTER TABLE employees ADD COLUMN deletion_status VARCHAR(20);

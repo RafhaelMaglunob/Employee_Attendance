@@ -54,6 +54,12 @@ export default function DeleteEmployeeModal({ isOpen, onClose, employeeId, updat
                         >
                             Resignation
                         </Button>
+                        <Button 
+                            onClick={() => setStatusType("End of Contract")}
+                            className="w-full text-left px-3 py-2 hover:bg-gray-200"
+                        >
+                            End of Contract
+                        </Button>
                     </Filter>
 
                     <label className="text-sm mb-1">Date *</label>

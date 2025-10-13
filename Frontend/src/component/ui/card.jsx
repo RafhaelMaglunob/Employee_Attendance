@@ -1,5 +1,4 @@
-// DashboardCard.jsx
-import React from "react";
+import React from 'react';
 import clsx from 'clsx';
 const variants = {
   admin: {
