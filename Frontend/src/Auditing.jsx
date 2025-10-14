@@ -9,14 +9,14 @@ import { applySearchAndFilter } from './component/utils/applySearchFilter';
 import { exportTableToWord } from './component/utils/exportableWord'
 
 function Auditing() {
-    const savedSort = localStorage.getItem("employeeSort") || "Filter";
+    const savedSort = localStorage.getItem("auditSort") || "Filter";
     
     const [selectedDate, setSelectedDate] = useState("");
     const [selectedSort, setSelectedSort] = useState(savedSort);
     const itemsPerPage = 5;
     const [query, setQuery] = useState("")
 
-    useEffect(() => { localStorage.setItem("employeeSort", selectedSort) }, [selectedSort]);
+    useEffect(() => { localStorage.setItem("auditSort", selectedSort) }, [selectedSort]);
         
     const transformEmployee = (emp) => ({
         name: emp.employee_name,

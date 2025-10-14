@@ -131,6 +131,15 @@ CREATE TABLE audit_logs (
     remarks TEXT
 );
 
+CREATE TABLE employee_work_logs (
+    log_id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees(employee_id),
+    employee_name VARCHAR(100),
+    work_date DATE NOT NULL,
+    hours_worked DECIMAL(5,2) NOT NULL
+);
+
+
 
 ALTER TABLE employees ADD CONSTRAINT unique_email UNIQUE(email);
 ALTER TABLE employees ADD CONSTRAINT unique_fullname UNIQUE(fullname);

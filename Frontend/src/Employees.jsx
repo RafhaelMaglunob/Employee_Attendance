@@ -94,10 +94,11 @@ function Employees() {
         {
             key: "actions",
             title: "Actions",
+            headerClassName: "text-right",
             render: row => {
                 const buttons = getActionButtons(row, activeTab, handleView, handleDocuments, handleDelete, handleRetrieve);
                 return (
-                    <div className="flex gap-2">
+                    <div className="flex justify-end gap-2">
                         {buttons.map((btn, idx) => (
                             <Button key={idx} onClick={btn.onClick} className="rounded-[50px] hover:bg-black/20 w-10 h-10">
                                 <img src={btn.img} alt={btn.alt} />

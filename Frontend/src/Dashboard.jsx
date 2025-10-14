@@ -30,7 +30,7 @@ function Dashboard() {
                         title="Attendance Summary"
                         variant="admin"
                         radius="none"
-                        className="flex-1    shadow-[8px_8px_0_#5E451D]"
+                        className="flex-1 shadow-[8px_8px_0_#5E451D]"
                     >
                         <div className="flex justify-around items-center flex-1 mt-4">
                             <div className="flex flex-col items-center">

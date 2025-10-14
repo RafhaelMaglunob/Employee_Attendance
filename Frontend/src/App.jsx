@@ -2,6 +2,7 @@ import { HashRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { useState } from 'react'
 
 import './App.css'
+import Background from './component/ui/Background.jsx';
 
 import Dashboard from './Dashboard.jsx'
 import Employees from './Employees.jsx'
@@ -14,6 +15,7 @@ import Salary from './Salary.jsx';
 import { Button } from './component/ui/button.jsx'
 import { Sidebar } from './component/layout/Container.jsx'
 import { NavBar } from './component/layout/NavBar.jsx'
+import Incident from './Incident.jsx';
 
 
 const sidebar = [
@@ -36,6 +38,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   return (
     <Router>
+      <Background className="fixed inset-0 -z-10 pointer-events-none" />
       <div className="flex overflow-x-hidden w-[100%] relative">
         {/*Sidebar*/}
         <Sidebar
@@ -103,6 +106,7 @@ function App() {
                 <Route path="/employee" element={<Employees />} />
                 <Route path="/audit" element={<Auditing />} />
                 <Route path="/salary" element={<Salary />} />
+                <Route path="/incident" element={<Incident />} />
                 <Route path="/schedule" element={<Scheduling />} />
                 <Route path="/attendance" element={<Attendance />} />
                 <Route path="/approval" element={<Approval />} />
