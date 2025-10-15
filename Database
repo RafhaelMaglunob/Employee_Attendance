@@ -139,10 +139,21 @@ CREATE TABLE employee_work_logs (
     hours_worked DECIMAL(5,2) NOT NULL
 );
 
+CREATE TABLE incident_reports (
+    incident_id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees(employee_id),
+    employee_name VARCHAR(100),
+    incident_type VARCHAR(100),
+    incident_date DATE NOT NULL,
+    status VARCHAR(50)
+);
 
 
 ALTER TABLE employees ADD CONSTRAINT unique_email UNIQUE(email);
 ALTER TABLE employees ADD CONSTRAINT unique_fullname UNIQUE(fullname);
 ALTER TABLE employees ADD COLUMN effective_deletion_date DATE;
+ALTER TABLE incident_reports ADD COLUMN witness VARCHAR(100);
+ALTER TABLE incident_reports ADD COLUMN reported_by VARCHAR(100);
+ALTER TABLE incident_reports ADD COLUMN description VARCHAR(100);
 ALTER TABLE employees_archive ADD CONSTRAINT unique_employee_archive_row UNIQUE (employee_id, fullname, email);
 ALTER TABLE employees ADD COLUMN deletion_status VARCHAR(20);
