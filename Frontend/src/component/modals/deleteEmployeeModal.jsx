@@ -4,31 +4,54 @@ import { Button } from '../ui/button';
 import { Filter } from '../ui/filter';
 import { ModalContainer } from '../ui/modal';
 
-export default function DeleteEmployeeModal({ isOpen, onClose, employeeId, updateData, api }) {
+export default function DeleteEmployeeModal({ isOpen, onClose, employeeId, updateData }) {
     const [statusType, setStatusType] = useState("Termination");
-    const [deletionDate, setDeletionDate] = useState(""); // Track selected date
+    const [deletionDate, setDeletionDate] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [errors, setErrors] = useState([]);
 
     if (!isOpen) return null;
 
     const handleDelete = async () => {
-        if (!deletionDate) {
-            alert("Please select a deletion date."); // simple alert for now
+        const validationErrors = [];
+
+        if (!deletionDate) validationErrors.push("Please select a deletion date.");
+
+        if (validationErrors.length > 0) {
+            setErrors(validationErrors);
             return;
         }
 
+        setLoading(true);
+        setErrors([]);
+
         try {
-            const res = await fetch(
-                `http://localhost:3001/api/${api}/${employeeId}?status=${statusType}&deletionDate=${deletionDate}`, 
-                { method: "DELETE" }
-            ); 
-            
-            if (!res.ok) throw new Error("Delete failed");
-            
-            await res.json();
-            updateData(prev => prev.filter(emp => emp.employee_id !== employeeId));
+            const res = await fetch(`http://localhost:3001/api/employees/${employeeId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: statusType, deletion_date: deletionDate })
+            });
+
+            const data = await res.json(); // parse only once
+
+            if (!res.ok) {
+                throw new Error(data.message || "Failed to update employee");
+            }
+
+            updateData(prev =>
+                prev.map(emp =>
+                    emp.employee_id === employeeId
+                        ? { ...emp, deletion_status: statusType, effective_deletion_date: deletionDate }
+                        : emp
+                )
+            );
+
             onClose();
         } catch (err) {
-            console.error("Failed to delete employee:", err);
+            console.error("Failed to update employee:", err);
+            setErrors([err.message || "Failed to update employee"]);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -39,57 +62,40 @@ export default function DeleteEmployeeModal({ isOpen, onClose, employeeId, updat
             variant="admin" 
             onClose={onClose}
         >
-            <Card className="bg-yellow-400 border-none">
+            <Card radius="none" className="bg-yellow-400 shadow-none">
                 <div className="flex flex-col w-full relative space-y-4">
                     <label className="text-sm mb-1">Status Change Type</label>
                     <Filter className="flex flex-row text-black" noIcon={true} value={statusType}>
-                        <Button 
-                            onClick={() => setStatusType("Termination")}
-                            className="w-full text-left px-3 py-2 hover:bg-gray-200">
-                            Termination
-                        </Button>
-                        <Button 
-                            onClick={() => setStatusType("Resignation")}
-                            className="w-full text-left px-3 py-2 hover:bg-gray-200"
-                        >
-                            Resignation
-                        </Button>
-                        <Button 
-                            onClick={() => setStatusType("End of Contract")}
-                            className="w-full text-left px-3 py-2 hover:bg-gray-200"
-                        >
-                            End of Contract
-                        </Button>
+                        <Button onClick={() => setStatusType("Termination")} className="w-full text-left px-3 py-2 hover:bg-gray-200">Termination</Button>
+                        <Button onClick={() => setStatusType("Resignation")} className="w-full text-left px-3 py-2 hover:bg-gray-200">Resignation</Button>
                     </Filter>
 
-                    <label className="text-sm mb-1">Date *</label>
+                    <label className="text-sm mb-1">Effective Deletion Date *</label>
                     <input 
-                        id="deletionDate"
                         type="date"
                         value={deletionDate}
                         onChange={(e) => setDeletionDate(e.target.value)}
-                        className="
-                            block w-full bg-white border border-gray-300 rounded-lg px-3 py-2
-                            text-sm sm:text-base
-                            focus:outline-none focus:ring-2 focus:ring-blue-500
-                            overflow-hidden
-                        "
+                        className="block w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
+
+                    {errors.length > 0 && (
+                        <ul className="text-red-700 mt-1 list-disc list-inside">
+                            {errors.map((err, idx) => (
+                                <li key={idx}>{err}</li>
+                            ))}
+                        </ul>
+                    )}
                 </div>
+
                 <div className="flex justify-end space-x-2 mt-4">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleDelete}
+                    <Button onClick={onClose} className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Cancel</Button>
+                    <Button 
+                        onClick={handleDelete} 
                         className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-                        disabled={!deletionDate}
+                        disabled={!deletionDate || loading}
                     >
-                        Confirm {statusType}
-                    </button>
+                        {loading ? "Saving..." : `Confirm ${statusType}`}
+                    </Button>
                 </div>
             </Card>
         </ModalContainer>

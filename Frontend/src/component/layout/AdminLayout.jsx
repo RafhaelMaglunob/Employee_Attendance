@@ -1,4 +1,4 @@
-// component/layout/MainLayout.jsx
+// component/layout/AdminLayout.jsx
 import React, { useState, useEffect } from "react";
 import { Outlet, Link, useNavigate } from "react-router-dom";
 import { Sidebar } from "./Container.jsx";
@@ -21,7 +21,7 @@ const sidebar = [
 ];
 
 
-export default function MainLayout() {
+export default function AdminLayout() {
   const userRole = localStorage.getItem("userRole")?.toLowerCase();
   const navigate = useNavigate();
   const savedPath = localStorage.getItem("buttonPath")?.toLowerCase();

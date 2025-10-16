@@ -1,6 +1,8 @@
 import { Form } from "../form/Form";
 import { ModalContainer } from "../ui/modal";
 import { useState, useEffect } from "react";
+import { useFetchData } from "../hooks/useFetchData";
+import { Table } from "../data/table";
 
 export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateData, api }) {
     const [employee, setEmployee] = useState(null);
@@ -8,11 +10,19 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
     const [readOnly, setReadOnly] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Fetch employee
+    const transformContract = (emp) => ({
+        start_of_contract: emp.start_of_contract,
+        end_of_contract: emp.end_of_contract
+    })
+
+    const { data: empContract } = useFetchData(
+        `http://localhost:3001/api/${api}/contract/${employeeId}`,
+        transformContract
+    )
+
     useEffect(() => {
         if (!isOpen || !employeeId) return;
 
-        // Reset state for new employee
         setEmployee(null);
         setReadOnly(true);
 
@@ -79,6 +89,11 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
             ],
         },
     ];
+    
+    const contractFields = [
+        { key: "start_of_contract", title: "Start of Contract *" },
+        { key: "end_of_contract", title: "End of Contract *" },
+    ]
 
     const handleSubmit = async (formData) => {
         if (readOnly) {
@@ -126,7 +141,15 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
                 onSubmit={handleSubmit}
                 submitText={api.toLowerCase() !== "archive" ? (readOnly ? "Edit" : "Save Changes") : ""}
                 cancelText={readOnly ? "Close" : "Cancel"}
-                errorText={error}
+                contracts={
+                    <Table columns={contractFields} data={empContract}></Table>
+                }
+                errorText={Array.isArray(error)
+                    ? error
+                    : error
+                        ? error.split('.').map(s => s.trim()).filter(Boolean)
+                        : []
+                }
                 onCancel={() => {
                     if(readOnly){
                         handleClose()

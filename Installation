@@ -26,6 +26,9 @@ Backend Installation
     npm install fastify pg @fastify/cors
     npm install dotenv
     npm install googleapis pg node-cron
+    npm install googleapis pg node-schedule
     npm install bcrypt
+    npm install nodemailer bcryptjs crypto
+    npm install jsonwebtoken
 
 

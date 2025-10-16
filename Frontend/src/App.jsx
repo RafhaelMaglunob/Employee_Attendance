@@ -1,7 +1,10 @@
 import { HashRouter as Router, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "./component/utils/protectedRoute.jsx";
+import { ProtectedEmployeeRoute } from "./component/utils/protectedEmployeeRoute.jsx"
+
 import Login from "./Login.jsx";
-import MainLayout from "./component/layout/MainLayout.jsx";
+import AdminLayout from "./component/layout/AdminLayout.jsx";
+import EmployeeLayout from "./component/layout/EmployeeLayout.jsx";
 import Dashboard from "./Dashboard.jsx";
 import Employees from "./Employees.jsx";
 import Auditing from "./Auditing.jsx";
@@ -12,18 +15,22 @@ import Scheduling from "./Scheduling.jsx";
 import Attendance from "./Attendance.jsx";
 import Approval from "./Approval.jsx";
 
+
+import EmployeeLogin from "./EmployeeLogin.jsx"
+import EmployeeDashboard from "./EmployeeDashboard.jsx";
+
 function App() {
   return (
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
 
-        {/* Everything under /app is protected */}
+        {/* Everything under / is protected */}
         <Route
           path="/"
           element={
             <ProtectedRoute>
-              <MainLayout />
+              <AdminLayout />
             </ProtectedRoute>
           }
         >
@@ -37,6 +44,15 @@ function App() {
           <Route path="schedule" element={<Scheduling />} />
           <Route path="attendance" element={<Attendance />} />
           <Route path="approval" element={<Approval />} />
+        </Route>
+
+        <Route path="/employee-login" element={<EmployeeLogin />} />
+        <Route path="/employee" element={
+          <ProtectedEmployeeRoute>
+            <EmployeeLayout />
+          </ProtectedEmployeeRoute>
+        }>
+          <Route path="dashboard" element={<EmployeeDashboard />} />
         </Route>
       </Routes>
     </Router>

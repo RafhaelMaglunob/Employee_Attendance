@@ -1,6 +1,7 @@
 // Form.jsx
 import React from "react";
 import { Button } from "../ui/button";
+import { Table } from "../data/table";
 
 export function Form({ 
     title, 
@@ -9,7 +10,9 @@ export function Form({
     submitText = "Submit", 
     cancelText, 
     onCancel,
-    errorText
+    onFieldChange,
+    errorText,
+    contracts,
 }) {
     return (
         <div className="rounded-xl p-6 w-full">
@@ -102,14 +105,29 @@ export function Form({
                                     disabled={field.disabled}
                                     defaultValue={field.defaultValue || ""}
                                     required={field.required ?? true}
+                                    onChange={e => onFieldChange(field.name, e.target.value)}
                                     className={`
                                         ${field.disabled ? "appearance-none" : "cursor-pointer"} 
                                         w-full bg-white border border-gray-300 rounded-lg px-3 h-9 focus:outline-none focus:ring-2 focus:ring-blue-500`}
                                 >
-                                    {field.options?.map((opt, i) => (
-                                        <option key={i} value={opt}>{opt}</option>
-                                    ))}
+                                    {field.options?.map((opt, i) => {
+                                        if (typeof opt === "string") {
+                                            return <option key={i} value={opt}>{opt}</option>;
+                                        } else {
+                                            return (
+                                                <option
+                                                    key={i}
+                                                    value={opt.value}
+                                                    disabled={opt.disabled}
+                                                    selected={opt.selected}
+                                                >
+                                                    {opt.label}
+                                                </option>
+                                            );
+                                        }
+                                    })}
                                 </select>
+
                             ) : (
                                 <input
                                     type={field.type || "text"}
@@ -125,8 +143,27 @@ export function Form({
                     );
                 })}
                 
+                <div className="col-span-1 md:col-span-2 w-full flex  flex-col">
+                    {contracts && (
+                        contracts
+                    )}
+                </div>
                 <div className="col-span-1 md:col-span-2 flex align-center justify-center border-t mt-4  font-bold text-lg">
-                    {errorText && <p className="text-red-600 mt-2 align-center">{errorText}</p>}
+                    {errorText && (
+                        <div className="col-span-1 md:col-span-2 mt-2 text-red-600">
+                            {typeof errorText === "string" ? (
+                                <ul className="list-disc list-inside">
+                                    {errorText.split('.').map((err, idx) => err.trim() && <li key={idx}>{err.trim()}</li>)}
+                                </ul>
+                            ) : Array.isArray(errorText) ? (
+                                <ul className="list-disc list-inside">
+                                    {errorText.map((err, idx) => <li key={idx}>{err}</li>)}
+                                </ul>
+                            ) : (
+                                errorText // if it's already a React element, render as is
+                            )}
+                        </div>
+                    )}
                 </div>
                 {/* Footer Buttons */}
                 <div className="col-span-1 md:col-span-2 flex justify-end gap-2 pt-4">
