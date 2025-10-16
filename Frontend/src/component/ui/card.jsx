@@ -1,15 +1,17 @@
 import React from 'react';
 import clsx from 'clsx';
 const variants = {
+  hr: {
+    title: "bg-red-600 text-white px-4 py-2 text-sm font-semibold flex items-center gap-2 border-b-1 border-b-[#5E451D]",
+    body: "bg-yellow-400 flex flex-col shadow-[8px_8px_0_#5E451D] font-inter",
+  },
   admin: {
     title: "bg-red-600 text-white px-4 py-2 text-sm font-semibold flex items-center gap-2 border-b-1 border-b-[#5E451D]",
     body: "bg-yellow-400 flex flex-col shadow-[8px_8px_0_#5E451D] font-inter",
   },
   default: {
-    title:
-      "bg-gray-100 text-gray-800 px-4 py-2 text-sm font-semibold flex items-center gap-2",
-    body:
-      "bg-white flex flex-col border border-gray-200 font-inter",
+    title: "bg-red-600 text-white px-4 py-2 text-sm font-semibold flex items-center gap-2 border-b-1 border-b-[#5E451D]",
+    body: "bg-yellow-400 flex flex-col shadow-[8px_8px_0_#5E451D] font-inter",
   },
 }
 
@@ -48,7 +50,7 @@ export function Card({
       {(title || header) && (
         <div className={clsx(
           variants[variant].title,
-          "px-4 py-2 border-b bg-gray-100 w-full"
+          "px-4 py-2 border-b w-full"
           )}>
           {title && <h2 className={`${titleSizes[titleSize] || "text-sm"} font-semibold mb-1`}>{title}</h2>}
           {header}

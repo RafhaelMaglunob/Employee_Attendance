@@ -1,121 +1,46 @@
-import { HashRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import { useState } from 'react'
-
-import './App.css'
-import Background from './component/ui/Background.jsx';
-
-import Dashboard from './Dashboard.jsx'
-import Employees from './Employees.jsx'
-import Scheduling from './Scheduling.jsx'
-import Attendance from './Attendance.jsx'
-import Approval from './Approval.jsx'
-import Auditing from './Auditing.jsx';
-import Salary from './Salary.jsx';
-
-import { Button } from './component/ui/button.jsx'
-import { Sidebar } from './component/layout/Container.jsx'
-import { NavBar } from './component/layout/NavBar.jsx'
-import Incident from './Incident.jsx';
-
-
-const sidebar = [
-  //Admin HR
-  {name: "Dashboard", src: "../img/Dashboard_Icon.png", alt:"Dashboard Icon", path: "dashboard"},
-  {name: "Employees", src: "../img/Employees_Icon.png", alt:"Employees Icon", path: "employee"},
-  {name: "Auditing", src: "../img/Auditing_Icon.png", alt:"Auditing Icon", path: "audit"},
-  {name: "Salary", src: "../img/Salary_Icon.png", alt:"Salary Icon", path: "salary"},
-  {name: "Incidents", src: "../img/Incidents_Icon.png", alt:"Incidents Icon", path: "incident"},
-  {name: "Reports", src: "../img/Reports_Icon.png", alt:"Reports Icon", path: "report"},
-
-  //HR
-  {name: "Scheduling", src: "../img/Schedule_Icon.png", alt:"Schedule Icon", path: "schedule"},
-  {name: "Attendance", src: "../img/Attendance_Icon.png", alt:"Attendance Icon", path: "attendance"},
-  {name: "Approvals", src: "../img/Approval_Icon.png", alt:"Approvals Icon", path: "approval"},
-]
+import { HashRouter as Router, Routes, Route } from "react-router-dom";
+import { ProtectedRoute } from "./component/utils/protectedRoute.jsx";
+import Login from "./Login.jsx";
+import MainLayout from "./component/layout/MainLayout.jsx";
+import Dashboard from "./Dashboard.jsx";
+import Employees from "./Employees.jsx";
+import Auditing from "./Auditing.jsx";
+import Salary from "./Salary.jsx";
+import Incident from "./Incident.jsx";
+import Reports from "./Reports.jsx";
+import Scheduling from "./Scheduling.jsx";
+import Attendance from "./Attendance.jsx";
+import Approval from "./Approval.jsx";
 
 function App() {
-  const userRole = "hr"
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   return (
     <Router>
-      <Background className="fixed inset-0 -z-10 pointer-events-none" />
-      <div className="flex overflow-x-hidden w-[100%] relative">
-        {/*Sidebar*/}
-        <Sidebar
-          className={`
-            fixed sm:sticky top-0 left-0 flex flex-col bg-[#FFC629] font-inter
-            z-40 transform transition-transform duration-300
-            w-56 sm:w-64
-            ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} 
-            sm:translate-x-0 sm:flex flex-col items-start space-y-1 overflow-y-auto
-          `}
+      <Routes>
+        <Route path="/login" element={<Login />} />
+
+        {/* Everything under /app is protected */}
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <MainLayout />
+            </ProtectedRoute>
+          }
         >
-
-          <div className="flex items-center justify-between w-full">
-            <img src="..\img\TheCrunchLogoSnoBG 1.png" className="flex mt-[-10px] ml-[-10px] mb-3"></img>
-            <button 
-              className={`${sidebarOpen ? "flex" : "hidden"} flex sm:hidden text-xl p-1 font-center mt-[-20px]`}
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-            >
-              X
-            </button>
-          </div>
-          {sidebar.map((item, index) => (
-            <Link 
-              key={index} 
-              to={`/${item.path}`} 
-              className="w-full"
-            >
-              <Button 
-                className="flex items-center justify-start py-2 space-x-2 px-4"
-              >
-                <img src={item.src} alt={item.alt}></img>
-                <p>{item.name}</p>
-              </Button>
-            </Link>
-          ))}
-        </Sidebar>
-
-        <div className="flex-1 flex flex-col w-full">
-          <NavBar className="flex sticky top-0 z-40 items-center border-b-8 border-b-[#5E451D]" variant={userRole}>
-            <button 
-              className="flex md:hidden ml-4"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-            >
-              <svg
-                className="h-6 w-6 text-gray-700"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
-            </button>
-            <img src="..\img\TheCrunchLogoMnoBG 1.png" className="w-auto object-contain"></img>
-          </NavBar>
-          
-          <div className="flex-1 sm:border-l-8 sm:border-l-[#5E451D] border-r-0 border-b-0 px-3 py-1">
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/employee" element={<Employees />} />
-                <Route path="/audit" element={<Auditing />} />
-                <Route path="/salary" element={<Salary />} />
-                <Route path="/incident" element={<Incident />} />
-                <Route path="/schedule" element={<Scheduling />} />
-                <Route path="/attendance" element={<Attendance />} />
-                <Route path="/approval" element={<Approval />} />
-              </Routes>
-          </div>
-        </div>
-      </div>
+          <Route index element={<Dashboard />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="employee" element={<Employees />} />
+          <Route path="audit" element={<Auditing />} />
+          <Route path="salary" element={<Salary />} />
+          <Route path="report" element={<Reports />} />
+          <Route path="incident" element={<Incident />} />
+          <Route path="schedule" element={<Scheduling />} />
+          <Route path="attendance" element={<Attendance />} />
+          <Route path="approval" element={<Approval />} />
+        </Route>
+      </Routes>
     </Router>
-  )
+  );
 }
 
-export default App
+export default App;

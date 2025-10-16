@@ -5,16 +5,11 @@ import { Button } from "../ui/button";
 
 export default function ViewHourTrackerModal({ isOpen, onClose, hoursTrackerId, hourTrackerPeriod, updateData }) {
     const [hoursTracker, setHoursTracker] = useState(null);
-    const [error, setError] = useState("");
-    const [readOnly, setReadOnly] = useState(true);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
     // Fetch hoursTracker
     useEffect(() => {
         if (!isOpen || !hoursTrackerId || !hourTrackerPeriod) return;
 
         setHoursTracker(null);
-        setReadOnly(true);
 
         let isMounted = true;
 
@@ -48,57 +43,6 @@ export default function ViewHourTrackerModal({ isOpen, onClose, hoursTrackerId, 
             <p>Loading hour tracker data...</p>
         </ModalContainer>
     );
-
-    const fields = [
-        { name: "employee_name", label: "Employee Name", defaultValue: hoursTracker.name || "-", disabled: readOnly, fullWidth: true },
-        { name: "pay_period", label: "Pay Period", defaultValue: hoursTracker.pay_period || "-", disabled: readOnly, fullWidth: true },
-        {   
-            section: " ",
-            col: 2,
-            fields: [
-                { name: "days_worked", label: "Days Worked", defaultValue: hoursTracker.days_worked || "-", disabled: readOnly },
-                { name: "hours_worked", label: "Hours Worked", defaultValue: hoursTracker.hours_worked || "-", disabled: readOnly },
-            ],
-        },
-    ];
-
-    const handleSubmit = async (formData) => {
-        if (readOnly) {
-            setReadOnly(false);
-            return;
-        }
-
-        if (isSubmitting) return;
-        setIsSubmitting(true);
-
-        try {
-            const res = await fetch(`http://localhost:3001/api/work-logs/${hoursTrackerId}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(formData),
-            });
-
-            const updated = await res.json();
-            if (!res.ok) {
-                setError(updated.message || updated.error || "Failed to update work log");
-                return;
-            }
-
-            setHoursTracker(updated);
-            if (typeof updateData === "function") updateData(updated);
-            setReadOnly(true);
-        } catch (err) {
-            console.error(err);
-            setError("Failed to update work log");
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const handleClose = () => {
-        setError("");
-        onClose();
-    };
 
     return (
         <ModalContainer width="lg" variant="admin" className="p-4">

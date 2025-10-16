@@ -169,8 +169,8 @@
                     <ViewHourTrackerModal
                         isOpen={isViewOpen}
                         onClose={() => setIsViewOpen(false)}
-                        hoursTrackerId={selectedEmployee.employee_id}
-                        hourTrackerPeriod={selectedEmployee.period}  // ← fix property name
+                        hoursTrackerId={selectedEmployee?.employee_id}
+                        hourTrackerPeriod={selectedEmployee?.period} 
                     />
 
 

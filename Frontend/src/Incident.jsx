@@ -18,7 +18,6 @@ function Incident() {
             employee_id: emp.employee_id,
             name: emp.employee_name,
             type: emp.incident_type,
-            incident_type: emp.incident_type,
             incident_date: emp.incident_date,
             status: emp.status,
             witness: emp.witness,

@@ -31,7 +31,7 @@ const getActionButtons = (row, activeTab, handleView, handleDocuments, handleDel
 
 function Employees() {
     const savedTab = (localStorage.getItem("employeeTab") || "employed").toLowerCase();
-    const savedSort = localStorage.getItem("employeeSort") || "Filter";
+    const savedSort = localStorage.getItem("employeeSortTable") || "Filter";
     const itemsPerPage = 5;
 
     const [query, setQuery] = useState("");
@@ -44,7 +44,7 @@ function Employees() {
     const [isDeleteOpen, setIsDeleteOpen] = useState(false);
     const [isRetrieveOpen, setIsRetrieveOpen] = useState(false);
 
-    useEffect(() => { localStorage.setItem("employeeSort", selectedSort) }, [selectedSort]);
+    useEffect(() => { localStorage.setItem("employeeSortTable", selectedSort) }, [selectedSort]);
     useEffect(() => { localStorage.setItem("employeeTab", activeTab) }, [activeTab]);
 
     const handleView = (row) => { setSelectedId(row.employee_id); setIsViewOpen(true); };

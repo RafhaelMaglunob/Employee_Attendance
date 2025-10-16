@@ -2,7 +2,7 @@ import React from "react";
 import clsx from "clsx";
 
 const variants = {
-    admin: "",
+    admin: "w-full h-15 bg-[#FFC629]",
     hr: "w-full h-15 bg-[#FFC629]",
 }
 

@@ -170,7 +170,6 @@ export function employeeController(pool) {
                 'SELECT * FROM employees WHERE employee_id = $1', [id]
             );
             if (res.rowCount === 0) {
-                await client.query('ROLLBACK');
                 return reply.status(404).send({ error: 'Employee not found in database' });
             }
 

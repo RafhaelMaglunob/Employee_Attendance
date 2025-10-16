@@ -3,6 +3,7 @@ import Fastify from "fastify";
 import pkg from "pg";
 import cors from "@fastify/cors"
 import 'dotenv/config'
+import bcrypt from 'bcrypt'
 
 import cron from 'node-cron'
 import { google } from "googleapis";
@@ -13,6 +14,8 @@ import { createArchiveTable } from "./db/archive.js";
 import { employeeRoutes } from "./routes/employeeRoute.js";
 import { archiveRoutes } from "./routes/archiveRoute.js";
 import { logRoutes } from "./routes/logRoute.js";
+import { attendanceRoutes } from "./routes/attendanceRoute.js";
+import { adminAccountRoutes } from "./routes/adminAccountRoute.js";
 
 const { Pool } = pkg;
 const fastify = Fastify();
@@ -67,6 +70,8 @@ fastify.get("/", async (req, res) => {
 fastify.register( employeeRoutes, {prefix: "/api"} )
 fastify.register( archiveRoutes, {prefix: "/api"} )
 fastify.register( logRoutes, {prefix: "/api"} )
+fastify.register( attendanceRoutes, {prefix: "/api"} )
+fastify.register( adminAccountRoutes, {prefix: "/api"} )
 
 cron.schedule('* * * * *', async () => { // runs every day at midnight
     const client = await pool.connect();
@@ -161,3 +166,4 @@ fastify.listen({ port: Number(process.env.PORT), host: '0.0.0.0' }, (err, addres
   }
   console.log(`🚀 Server running at ${address}`);
 });
+

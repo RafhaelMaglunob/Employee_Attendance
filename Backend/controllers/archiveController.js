@@ -26,7 +26,7 @@ export function archiveController(pool) {
             return { success: true, data: result.rows };
         } catch (err) {
             console.error("Database Error:", err.message);
-            reply.status(500).send({ error: "Database query failed" });
+            reply.status(500).send({ error: "Failed to fetch all archive" });
         }
     };
     
@@ -55,7 +55,7 @@ export function archiveController(pool) {
             });
         } catch (err) {
             console.error("Database Error:", err.message);
-            reply.status(500).send({ error: "Database query failed" });
+            reply.status(500).send({ error: "Database query (Archive, Single Fetching) failed" });
         }
     };
 

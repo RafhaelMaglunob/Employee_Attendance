@@ -110,22 +110,10 @@ CREATE TABLE employee_dependents_archive (
     postalcode VARCHAR(10),
     gcash_number VARCHAR(20)
 );
-CREATE TABLE employee_dependents_archive (
-    id SERIAL PRIMARY KEY,
-    employee_id TEXT REFERENCES employees(employee_id) ON DELETE CASCADE,
-    fullname VARCHAR(100),
-    relationship VARCHAR(50),
-    address VARCHAR(150),
-    contact VARCHAR(20),
-    city VARCHAR(50),
-    postalcode VARCHAR(10),
-    gcash_number VARCHAR(20)
-);
 
 CREATE TABLE audit_logs (
     log_id SERIAL PRIMARY KEY,
     employee_id TEXT REFERENCES employees(employee_id),
-    employee_name VARCHAR(100),
     action VARCHAR(255) NOT NULL,
     action_time TIMESTAMP DEFAULT NOW(),
     remarks TEXT
@@ -134,7 +122,6 @@ CREATE TABLE audit_logs (
 CREATE TABLE employee_work_logs (
     log_id SERIAL PRIMARY KEY,
     employee_id TEXT REFERENCES employees(employee_id),
-    employee_name VARCHAR(100),
     work_date DATE NOT NULL,
     hours_worked DECIMAL(5,2) NOT NULL
 );
@@ -142,18 +129,44 @@ CREATE TABLE employee_work_logs (
 CREATE TABLE incident_reports (
     incident_id SERIAL PRIMARY KEY,
     employee_id TEXT REFERENCES employees(employee_id),
-    employee_name VARCHAR(100),
     incident_type VARCHAR(100),
     incident_date DATE NOT NULL,
+    witness VARCHAR(100),
+    reported_by VARCHAR(100),
+    description VARCHAR(100),
     status VARCHAR(50)
 );
 
+CREATE TABLE employee_account (
+    account_id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees(employee_id),
+    username VARCHAR(100) UNIQUE NOT NULL,
+    password VARCHAR(100) NOT NULL  -- store bcrypt hash here
+);
+
+CREATE TABLE admin_account (
+    admin_id SERIAL PRIMARY KEY,
+    fullname VARCHAR(100),
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    role VARCHAR(50) DEFAULT 'Admin',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+
+CREATE TABLE employee_attendance (
+    attendance_id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees(employee_id),
+    attend_date DATE NOT NULL,
+    clock_in TIME NOT NULL,
+    clock_out TIME NOT NULL,
+    total_hours DECIMAL(5,2) NOT NULL,
+    status VARCHAR(100)
+);
 
 ALTER TABLE employees ADD CONSTRAINT unique_email UNIQUE(email);
 ALTER TABLE employees ADD CONSTRAINT unique_fullname UNIQUE(fullname);
 ALTER TABLE employees ADD COLUMN effective_deletion_date DATE;
-ALTER TABLE incident_reports ADD COLUMN witness VARCHAR(100);
-ALTER TABLE incident_reports ADD COLUMN reported_by VARCHAR(100);
-ALTER TABLE incident_reports ADD COLUMN description VARCHAR(100);
 ALTER TABLE employees_archive ADD CONSTRAINT unique_employee_archive_row UNIQUE (employee_id, fullname, email);
 ALTER TABLE employees ADD COLUMN deletion_status VARCHAR(20);
