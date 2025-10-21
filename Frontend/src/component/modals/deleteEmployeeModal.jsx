@@ -26,22 +26,26 @@ export default function DeleteEmployeeModal({ isOpen, onClose, employeeId, updat
         setErrors([]);
 
         try {
+            // Determine status based on selected type
+            const status = statusType === "Termination" ? "Termination" : "Resignation";
+
             const res = await fetch(`http://localhost:3001/api/employees/${employeeId}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status: statusType, deletion_date: deletionDate })
+                body: JSON.stringify({ status, deletion_date: deletionDate })
             });
 
-            const data = await res.json(); // parse only once
+            const data = await res.json();
 
             if (!res.ok) {
                 throw new Error(data.message || "Failed to update employee");
             }
 
+            // Update local data
             updateData(prev =>
                 prev.map(emp =>
                     emp.employee_id === employeeId
-                        ? { ...emp, deletion_status: statusType, effective_deletion_date: deletionDate }
+                        ? { ...emp, status, effective_deletion_date: deletionDate }
                         : emp
                 )
             );
@@ -54,6 +58,7 @@ export default function DeleteEmployeeModal({ isOpen, onClose, employeeId, updat
             setLoading(false);
         }
     };
+
 
     return (
         <ModalContainer 

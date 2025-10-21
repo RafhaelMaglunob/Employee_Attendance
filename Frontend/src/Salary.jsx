@@ -94,9 +94,6 @@
                 <div className="flex justify-between items-center mb-5 mt-3 mr-3">
                     <h1 className="font-bold text-2xl">Employee Hours Tracker</h1>
                     <div className="flex space-x-3">
-                        <Button className="bg-white px-4 py-2 rounded-xl border hover:bg-black/10 flex items-center">
-                            <img src="../img/Print_Icon.png" alt="Print" className="w-5 h-5 mr-2" />Print
-                        </Button>
                         <Button 
                             onClick={() => exportTableToWord(columns, filteredData, `audit_logs_${new Date().toISOString()}.docx`)}
                             className="bg-black text-white px-3 py-2 rounded-xl flex items-center hover:bg-black/70"

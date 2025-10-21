@@ -1,101 +1,219 @@
 import { Form } from "../form/Form";
 import { ModalContainer } from "../ui/modal";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useFetchData } from "../hooks/useFetchData";
-import { Table } from "../data/table";
+import { PaginatedTable } from "../data/table";
+import { Button } from "../ui/button";
 
 export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateData, api }) {
     const [employee, setEmployee] = useState(null);
-    const [error, setError] = useState("");
+    const [formValues, setFormValues] = useState({});
+    const [initialFormValues, setInitialFormValues] = useState({});
+    const [fieldErrors, setFieldErrors] = useState({});
+    const [dbError, setDbError] = useState("");
     const [readOnly, setReadOnly] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isRenewalOpen, setIsRenewalOpen] = useState(false);
 
+    // ✅ Transform contract data
     const transformContract = (emp) => ({
         start_of_contract: emp.start_of_contract,
-        end_of_contract: emp.end_of_contract
-    })
+        end_of_contract: emp.end_of_contract,
+    });
 
-    const { data: empContract } = useFetchData(
-        `http://localhost:3001/api/${api}/contract/${employeeId}`,
+    const { data: empContract, loading: contractLoading } = useFetchData(
+        `http://localhost:3001/api/employees/contract/${employeeId}`,
         transformContract
-    )
+    );
 
+    // ✅ Fetch employee data
     useEffect(() => {
         if (!isOpen || !employeeId) return;
 
         setEmployee(null);
         setReadOnly(true);
+        setDbError("");
+        setFieldErrors({});
 
         let isMounted = true;
 
         fetch(`http://localhost:3001/api/${api}/${employeeId}`)
-            .then(res => res.json())
-            .then(emp => {
+            .then((res) => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            })
+            .then((emp) => {
                 if (isMounted) setEmployee(emp);
             })
-            .catch(err => console.error("Failed to fetch employee:", err));
+            .catch((err) => {
+                console.error(err);
+                if (isMounted) setEmployee(null);
+            });
 
-        return () => { isMounted = false; };
-    }, [isOpen, employeeId]);
+        return () => {
+            isMounted = false;
+        };
+    }, [isOpen, employeeId, api]);
 
-    if (!isOpen) return null;
+    // ✅ Populate form values
+    useEffect(() => {
+        if (!employee) return;
 
-    if (!employee) return (
-        <ModalContainer title="View Employee" width="3xl" variant="admin">
-            <p>Loading employee data...</p>
-        </ModalContainer>
-    );
-    const formatDate = (isoString) => {
-        if (!isoString) return "-";
-        const date = new Date(isoString);
-        // Get year, month, day in local time
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, "0"); // Months are 0-indexed
-        const day = String(date.getDate()).padStart(2, "0");
-        return `${year}-${month}-${day}`;
+        const formatDate = (iso) => {
+            if (!iso) return "";
+            const d = new Date(iso);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        };
+
+        const values = {
+            fullname: employee.fullname || "",
+            employment_type: employee.employment_type || "",
+            position: employee.position || "",
+            status: employee.status || "",
+            nickname: employee.nickname || "",
+            email: employee.email || "",
+            gender: employee.gender || "",
+            contact: employee.contact || "",
+            birthday: employee.birthday ? formatDate(employee.birthday) : "",
+            marital_status: employee.marital_status || "",
+            address: employee.address || "",
+            sss_no: employee.sss_number || "",
+            pagibig_no: employee.pagibig || "",
+            philhealth_no: employee.philhealth || "",
+            emergency_name: employee.emergency_name || "",
+            relationship: employee.relationship || "",
+            emergency_address: employee.emergency_address || "",
+            emergency_contact: employee.emergency_contact || "",
+            city: employee.city || "",
+            postal_code: employee.postal_code || "",
+            gcash_no: employee.gcash_no || "",
+            start_of_contract: employee.start_of_contract || "",
+            end_of_contract: employee.end_of_contract || "",
+            contract_type: "",
+            contract_date: "",
+            currentContractEndDate: employee.end_of_contract || "",
+        };
+
+        setFormValues(values);
+        setInitialFormValues(values);
+    }, [employee]);
+
+    // ✅ Get latest contract (highest end_of_contract date)
+    const latestContract = useMemo(() => {
+        if (!Array.isArray(empContract) || empContract.length === 0) return null;
+        return empContract.reduce((latest, current) => {
+            const latestDate = new Date(latest.end_of_contract);
+            const currentDate = new Date(current.end_of_contract);
+            return currentDate > latestDate ? current : latest;
+        });
+    }, [empContract]);
+
+    // ✅ Validation Logic (with latest contract check)
+    const validateSingleField = (name, value, allValues) => {
+        const today = new Date();
+        const phoneRegex = /^(09|\+639)\d{9}$/;
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@(gmail|yahoo|outlook|hotmail)\.(com|ph|net)$/i;
+        const postalRegex = /^\d+$/;
+
+        switch (name) {
+            case "email":
+                if (!value) return "Email is required";
+                if (!emailRegex.test(value)) return "Invalid email format";
+                break;
+
+            case "contact":
+                if (!value) return "Contact required";
+                if (!phoneRegex.test(value.replace(/\s/g, ""))) return "Invalid contact number";
+                break;
+
+            case "emergency_contact":
+            case "gcash_no":
+                if (value && !phoneRegex.test(value.replace(/\s/g, ""))) return "Invalid phone number";
+                break;
+
+            case "postal_code":
+                if (value && !postalRegex.test(value)) return "Postal code must be numeric";
+                break;
+
+            case "birthday":
+                if (!value) return "Birthday required";
+                const bdate = new Date(value);
+                if (bdate > today) return "Birthday cannot be in the future";
+                const age = today.getFullYear() - bdate.getFullYear();
+                if (age < 15) return "Employee must be at least 15 years old";
+                break;
+
+            case "contract_date": {
+                if (!value) return "Contract date is required";
+                if (!latestContract) return "";
+
+                const parsedDate = new Date(value);
+                const latestEnd = new Date(latestContract.end_of_contract);
+                const type = allValues.contract_type;
+
+                if (isNaN(parsedDate.getTime())) return "Invalid contract date";
+
+                // ✅ Amendment Rule
+                if (type === "Amendment" && parsedDate > latestEnd)
+                    return "Amendment date cannot be later than the latest contract end date";
+
+                // ✅ Renewal Rule
+                if (type === "Renewal" && parsedDate < latestEnd)
+                    return "Renewal date cannot be earlier than the latest contract end date";
+                break;
+            }
+
+            default:
+                return "";
+        }
+        return "";
     };
 
-    const fields = [
-        { name: "fullname", label: "Full Name *", defaultValue: employee.fullname || "-", disabled: readOnly },
-        { name: "employment_type", label: "Employment Type *", type: "select", options: ["Full-Time", "Part-Time"], defaultValue: employee.employment_type || "-", disabled: readOnly },
-        { name: "position", label: "Position *", type: "select", options: ["Crew", "Head Staff"], defaultValue: employee.position || "-", disabled: readOnly },
-        { name: "status", label: "Status *", type: "select", options: ["Employed", "Probationary"], defaultValue: employee.status || "-", disabled: readOnly },
-        { name: "nickname", label: "Preferred Name / Nickname", defaultValue: employee.nickname || "-", disabled: readOnly },
-        { name: "email", label: "Email Address *", type: "email", defaultValue: employee.email || "-", disabled: readOnly },
-        { name: "gender", label: "Gender *", type: "select", options: ["Male", "Female"], defaultValue: employee.gender || "-", disabled: readOnly },
-        { name: "contact", label: "Contact No. *", defaultValue: employee.contact || "-", disabled: readOnly },
-        { name: "birthday", label: "Birthday *", type: "date", defaultValue: employee.birthday ? formatDate(employee.birthday).split("T")[0] : "-", disabled: readOnly },
-        { name: "marital_status", label: "Marital Status *", type: "select", options: ["Single", "Married"], defaultValue: employee.marital_status || "-", disabled: readOnly },
-        { name: "address", label: "Full Address *", fullWidth: true, defaultValue: employee.address || "-", disabled: readOnly },
-        {
-            section: "Required Information for Full-Time Employees",
-            col: 3,
-            fields: [
-                { name: "sss_no", label: "SSS No.", defaultValue: employee.sss_number || "-", disabled: readOnly },
-                { name: "pagibig_no", label: "PAG-IBIG No.", defaultValue: employee.pagibig || "-", disabled: readOnly },
-                { name: "philhealth_no", label: "PHILHEALTH No.", defaultValue: employee.philhealth || "-", disabled: readOnly },
-            ],
-        },
-        {
-            section: "Emergency Contact Person",
-            fields: [
-                { name: "emergency_name", label: "Full Name *", defaultValue: employee.emergency_name || "-", disabled: readOnly },
-                { name: "relationship", label: "Relationship *", defaultValue: employee.relationship || "-", disabled: readOnly },
-                { name: "emergency_address", label: "Address *", defaultValue: employee.emergency_address || "-", disabled: readOnly },
-                { name: "emergency_contact", label: "Contact No.", defaultValue: employee.emergency_contact || "-", disabled: readOnly },
-                { name: "city", label: "City *", defaultValue: employee.city || "-", disabled: readOnly },
-                { name: "postal_code", label: "Postal Code *", defaultValue: employee.postal_code || "-", disabled: readOnly },
-                { name: "gcash_no", label: "Gcash No.", defaultValue: employee.gcash_no || "-", disabled: readOnly },
-            ],
-        },
-    ];
-    
-    const contractFields = [
-        { key: "start_of_contract", title: "Start of Contract *" },
-        { key: "end_of_contract", title: "End of Contract *" },
-    ]
+    // ✅ Live field change + validation
+    const handleFieldChange = (name, value) => {
+        let formattedValue = value;
 
-    const handleSubmit = async (formData) => {
+        // phone normalization
+        if (["contact", "emergency_contact", "gcash_no"].includes(name)) {
+            let digits = value.replace(/\D/g, "");
+            if (digits.startsWith("0")) digits = "63" + digits.slice(1);
+            if (!digits.startsWith("63")) digits = "63" + digits;
+            digits = digits.slice(0, 12);
+            const local = digits.slice(2);
+            formattedValue = "+63";
+            if (local.length >= 3) formattedValue += " " + local.slice(0, 3);
+            if (local.length >= 6) formattedValue += " " + local.slice(3, 6);
+            if (local.length >= 10) formattedValue += " " + local.slice(6, 10);
+        }
+
+        // ID formats
+        if (name === "sss_no") {
+            const digits = value.replace(/\D/g, "").slice(0, 10);
+            if (digits.length <= 2) formattedValue = digits;
+            else if (digits.length <= 9) formattedValue = `${digits.slice(0, 2)}-${digits.slice(2)}`;
+            else formattedValue = `${digits.slice(0, 2)}-${digits.slice(2, 9)}-${digits.slice(9)}`;
+        }
+
+        if (name === "pagibig_no") {
+            const digits = value.replace(/\D/g, "").slice(0, 12);
+            formattedValue = digits.replace(/(\d{4})(?=\d)/g, "$1-");
+        }
+
+        if (name === "philhealth_no") {
+            const digits = value.replace(/\D/g, "").slice(0, 12);
+            if (digits.length <= 2) formattedValue = digits;
+            else if (digits.length <= 11) formattedValue = `${digits.slice(0, 2)}-${digits.slice(2)}`;
+            else formattedValue = `${digits.slice(0, 2)}-${digits.slice(2, 11)}-${digits.slice(11)}`;
+        }
+
+        setFormValues((prev) => ({ ...prev, [name]: formattedValue }));
+
+        const newError = validateSingleField(name, formattedValue, { ...formValues, [name]: formattedValue });
+        setFieldErrors((prev) => ({ ...prev, [name]: newError }));
+    };
+
+    // ✅ Submit Handler
+    const handleSubmit = async (data) => {
         if (readOnly) {
             setReadOnly(false);
             return;
@@ -103,62 +221,220 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
 
         if (isSubmitting) return;
         setIsSubmitting(true);
+        setDbError("");
+
+        const allErrors = {};
+        Object.keys(formValues).forEach((f) => {
+            const err = validateSingleField(f, formValues[f], formValues);
+            if (err) allErrors[f] = err;
+        });
+        setFieldErrors(allErrors);
+
+        if (Object.keys(allErrors).length > 0) {
+            setIsSubmitting(false);
+            return;
+        }
+
+        // 🧩 Date validation for contract fields
+        const start = new Date(formValues.contract_start);
+        const end = new Date(formValues.contract_end);
+
+        if (end < start) {
+            setFieldErrors({
+                ...allErrors,
+                contract_end: "End date cannot be before start date.",
+            });
+            setIsSubmitting(false);
+            return;
+        }
+
+        // 🧩 Amendment date validation (cannot be earlier than current contract end)
+        if (formValues.contract_type === "Amendment") {
+            const renewalDate = new Date(formValues.contract_date);
+            if (renewalDate <= end) {
+                setFieldErrors({
+                    ...allErrors,
+                    contract_date: "Amendment date must be later than current contract end date.",
+                });
+                setIsSubmitting(false);
+                return;
+            }
+        }
+
+        // 🧩 Clone and clean payload if renewal form is closed
+        const payload = { ...data };
+        if (!isRenewalOpen) {
+            delete payload.contract_type;
+            delete payload.contract_date;
+        }
 
         try {
             const res = await fetch(`http://localhost:3001/api/${api}/${employeeId}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(formData),
+                body: JSON.stringify(payload),
             });
 
             const updated = await res.json();
             if (!res.ok) {
-                setError(updated.message || updated.error || "Failed to add employee");
+                setDbError(updated.error || "Failed to update employee");
                 return;
             }
-            
+
             setEmployee(updated);
-
-            if (typeof updateData === "function") updateData(updated);
-
+            setFormValues(updated);
             setReadOnly(true);
+            if (typeof updateData === "function") updateData(updated);
         } catch (err) {
             console.error(err);
+            setDbError(err.message || "Failed to update employee");
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    const handleClose = async () => {
-        setError("")
-        onClose()
-    }
+    const handleClose = () => {
+        setFieldErrors({});
+        setDbError("");
+        onClose();
+    };
+
+    // ✅ Dynamic Form Fields (untouched)
+    const fields = useMemo(() => [
+        { name: "fullname", label: "Full Name *", disabled: readOnly },
+        { name: "employment_type", label: "Employment Type *", type: "select", options: ["Full-Time", "Part-Time"], disabled: readOnly },
+        { name: "position", label: "Position *", type: "select", options: ["Crew", "Head Staff"], disabled: readOnly },
+        { name: "status", label: "Status *", type: "select", options: ["Employed", "Probationary"], disabled: readOnly },
+        { name: "nickname", label: "Preferred Name / Nickname", disabled: readOnly },
+        { name: "email", label: "Email Address *", type: "email", disabled: readOnly },
+        { name: "gender", label: "Gender *", type: "select", options: ["Male", "Female"], disabled: readOnly },
+        { name: "contact", label: "Contact No. *", disabled: readOnly },
+        { name: "birthday", label: "Birthday *", type: "date", disabled: readOnly },
+        { name: "marital_status", label: "Marital Status *", type: "select", options: ["Single", "Married"], disabled: readOnly },
+        { name: "address", label: "Full Address *", fullWidth: true, disabled: readOnly },
+        ...(formValues.employment_type === "Full-Time"
+            ? [
+                {
+                    section: "Required Information for Full-Time Employees",
+                    col: 3,
+                    fields: [
+                        { name: "sss_no", label: "SSS No." },
+                        { name: "pagibig_no", label: "PAG-IBIG No." },
+                        { name: "philhealth_no", label: "PHILHEALTH No." },
+                    ],
+                },
+            ]
+            : []),
+        ...(formValues.employment_type === "Part-Time" && !readOnly && isRenewalOpen
+            ? [
+                {
+                    section: "Renewal/Amendment of Contract for Part-Time Employees",
+                    col: 2,
+                    fields: [
+                        {
+                            name: "contract_type",
+                            label: "Contract Type *",
+                            type: "select",
+                            options: [
+                                { label: "--Select Contract Type--", value: "", disabled: true, selected: true },
+                                { label: "Amendment", value: "Amendment" },
+                                { label: "Renewal", value: "Renewal" },
+                            ],
+                            disabled: readOnly,
+                        },
+                        {
+                            name: "contract_date",
+                            label: "Contract Date *",
+                            type: "date",
+                            disabled: readOnly,
+                        },
+                    ],
+                },
+            ]
+            : []),
+        {
+            section: "Emergency Contact Person",
+            fields: [
+                { name: "emergency_name", label: "Full Name *", disabled: readOnly },
+                { name: "relationship", label: "Relationship *", disabled: readOnly },
+                { name: "emergency_address", label: "Address *", disabled: readOnly },
+                { name: "emergency_contact", label: "Contact No.", disabled: readOnly },
+                { name: "city", label: "City *", disabled: readOnly },
+                { name: "postal_code", label: "Postal Code *", disabled: readOnly },
+                { name: "gcash_no", label: "Gcash No.", disabled: readOnly },
+            ],
+        },
+    ], [readOnly, isRenewalOpen, formValues.employment_type]);
+
+    const contractFields = useMemo(() => [
+        { key: "no", title: "No." },
+        { key: "start_of_contract", title: "Start of Contract *" },
+        { key: "end_of_contract", title: "End of Contract *" },
+    ], []);
+
+    const numberedContracts = (empContract || []).map((item, index) => ({
+        ...item,
+        no: index + 1,
+    }));
+
+
+
+    if (!isOpen) return null;
 
     return (
         <ModalContainer title={readOnly ? "View Employee" : "Edit Employee"} width="3xl" variant="admin">
-            <Form
-                fields={fields}
-                onSubmit={handleSubmit}
-                submitText={api.toLowerCase() !== "archive" ? (readOnly ? "Edit" : "Save Changes") : ""}
-                cancelText={readOnly ? "Close" : "Cancel"}
-                contracts={
-                    <Table columns={contractFields} data={empContract}></Table>
-                }
-                errorText={Array.isArray(error)
-                    ? error
-                    : error
-                        ? error.split('.').map(s => s.trim()).filter(Boolean)
-                        : []
-                }
-                onCancel={() => {
-                    if(readOnly){
-                        handleClose()
-                    } else {
-                        setReadOnly(true)
-                    }
+            {!employee ? (
+                <p>Loading employee data...</p>
+            ) : (
+                <Form
+                    fields={fields}
+                    formValues={formValues}
+                    errorText={fieldErrors}
+                    onFieldChange={handleFieldChange}
+                    onSubmit={handleSubmit}
+                    submitText={readOnly ? "Edit" : "Save Changes"}
+                    cancelText={readOnly ? "Close" : "Cancel"}
+                    contracts={
+                        <div className="flex flex-col w-full space-y-3 items-center">
+                            <PaginatedTable className="w-full" columns={contractFields} data={numberedContracts} itemsPerPage={5} />
+                            {!readOnly && (
+                                <Button
+                                    type="button"
+                                    onClick={() => {
+                                        if (isRenewalOpen) {
+                                            // 🧹 If closing, clear renewal-specific fields
+                                            setFormValues(prev => ({
+                                                ...prev,
+                                                contract_type: "",
+                                                contract_date: ""
+                                            }));
+                                        }
+                                        setIsRenewalOpen(!isRenewalOpen);
+                                    }}
 
-                }}
-            />
+                                    className={`${
+                                        !isRenewalOpen ? "bg-green-500 border-green-700" : "bg-red-500 border-red-700"
+                                    } text-sm border w-fit rounded-lg px-3 py-1 text-white`}
+                                >
+                                    {!isRenewalOpen ? "New Contract" : "Close Contract"}
+                                </Button>
+                            )}
+                        </div>
+                    }
+                    onCancel={() => {
+                        if (readOnly) {
+                            handleClose();
+                        } else {
+                            setFormValues(initialFormValues);
+                            setFieldErrors({});
+                            setReadOnly(true);
+                        }
+                    }}
+                />
+            )}
+
+            {dbError && <p className="text-red-500 mt-2">{dbError}</p>}
+            {contractLoading && <p className="text-gray-400 mt-2">Loading contracts...</p>}
         </ModalContainer>
     );
 }

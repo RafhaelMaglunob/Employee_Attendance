@@ -6,7 +6,7 @@ export function useFetchData(url, transform) {
 
     useEffect(() => {
         let isMounted = true;
-
+        if (!url) return;
         fetch(url)
             .then(res => res.json())
             .then(result => {
@@ -16,7 +16,10 @@ export function useFetchData(url, transform) {
                 const items = Array.isArray(result.data) ? result.data : [];
                 setData(transform ? items.map(transform) : items);
             })
-            .catch(err => console.error("Database Error:", err))
+            .catch(err => {
+                console.error("Database Error:", err)
+                setData([])
+            })
             .finally(() => { if (isMounted) setLoading(false); });
 
         return () => { isMounted = false; };

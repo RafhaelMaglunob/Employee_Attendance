@@ -29,7 +29,10 @@ export function Table({ columns, data, className }) {
             </tr>
           ) : (
             data.map((row, rowIndex) => (
-              <tr key={rowIndex} className="hover:bg-gray-50">
+              <tr
+                key={rowIndex}
+                className={rowIndex % 2 === 0 ? "bg-white" : "bg-gray-50 hover:bg-gray-100"}
+              >
                 {columns.map((col) => (
                   <td
                     key={col.key}
@@ -96,7 +99,10 @@ export function PaginatedTable({ columns, data, itemsPerPage = 5, className }) {
             </tr>
           ) : (
             paginatedData.map((row, rowIndex) => (
-              <tr key={rowIndex} className="hover:bg-gray-50">
+              <tr
+                key={rowIndex}
+                className={rowIndex % 2 === 0 ? "bg-white" : "bg-gray-200 hover:bg-gray-100"}
+              >
                 {columns.map((col) => (
                   <td
                     key={col.key}

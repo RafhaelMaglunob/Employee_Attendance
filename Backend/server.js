@@ -2,6 +2,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors"
 import 'dotenv/config'
+import bcrypt from 'bcrypt'
 import { pool } from './db/pool.js';
 import { createEmployeesTable } from "./db/employee.js";
 import { createArchiveTable } from "./db/archive.js";
@@ -66,5 +67,4 @@ fastify.listen({ port: Number(process.env.PORT), host: '0.0.0.0' }, (err, addres
   }
   console.log(`🚀 Server running at ${address}`);
 });
-
 

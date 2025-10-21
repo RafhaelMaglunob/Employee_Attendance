@@ -1,115 +1,183 @@
-import { Table } from "../data/table";
 import { Form } from "../form/Form";
 import { ModalContainer } from "../ui/modal";
 import { useState, useEffect } from "react";
 import { useFetchData } from "../hooks/useFetchData";
+import { Table } from "../data/table";
 
-export default function RetrieveEmployeeModal({ isOpen, onClose, employeeId, updateData, api }) {
-    const [employee, setEmployee] = useState(null);
-    const [error, setError] = useState("");
-    const [isSubmitting, setIsSubmitting] = useState(false);
+export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateData, api }) {
+	const [employee, setEmployee] = useState(null);
+	const [formValues, setFormValues] = useState({});
+	const [error, setError] = useState("");
+	const [readOnly, setReadOnly] = useState(true);
+	const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const transformContract = (emp) => ({
-        start_of_contract: emp.start_of_contract,
-        end_of_contract: emp.end_of_contract
-    })
+	// Fetch archived contracts
+	const { data: empContract } = useFetchData(
+		employeeId ? `http://localhost:3001/api/${api}/contract/${employeeId}` : null,
+		(emp) => {
+			// ensure it is always an array
+			if (!emp) return [];
+			return Array.isArray(emp)
+				? emp.map(c => ({
+						start_of_contract: c.start_of_contract,
+						end_of_contract: c.end_of_contract
+				  }))
+				: [{ start_of_contract: emp.start_of_contract, end_of_contract: emp.end_of_contract }];
+		}
+	);
 
-    const { data: empContract } = useFetchData(
-        `http://localhost:3001/api/${api}/contract/${employeeId}`,
-        transformContract
-    )
-    // Fetch employee + contracts + dependents + documents
-    useEffect(() => {
-        if (!isOpen || !employeeId) return;
+	// Fetch employee data
+	useEffect(() => {
+		if (!isOpen || !employeeId) return;
 
-        let isMounted = true;
-        setEmployee(null);
-        setError("");
+		setEmployee(null);
+		setReadOnly(true);
 
-        fetch(`http://localhost:3001/api/${api}/${employeeId}`)
-            .then(res => res.json())
-            .then(emp => { if (isMounted) setEmployee(emp); })
-            .catch(err => console.error("Failed to fetch employee:", err));
+		let isMounted = true;
+		fetch(`http://localhost:3001/api/${api}/${employeeId}`)
+			.then(res => res.json())
+			.then(emp => {
+				if (isMounted) setEmployee(emp);
+			})
+			.catch(err => console.error("Failed to fetch employee:", err));
 
-        return () => { isMounted = false; };
-    }, [isOpen, employeeId, api]);
+		return () => {
+			isMounted = false;
+		};
+	}, [isOpen, employeeId]);
 
-    if (!isOpen) return null;
+	// Populate formValues when employee loads
+	useEffect(() => {
+		if (!employee) return;
 
-    if (!employee) return (
-        <ModalContainer title="View Employee" width="3xl" variant="admin">
-            <p>Loading employee data...</p>
-        </ModalContainer>
-    );
+		const formatDate = (iso) => {
+			if (!iso) return "";
+			const d = new Date(iso);
+			const year = d.getFullYear();
+			const month = String(d.getMonth() + 1).padStart(2, "0");
+			const day = String(d.getDate()).padStart(2, "0");
+			return `${year}-${month}-${day}`;
+		};
 
-    const formatDate = (iso) => iso ? new Date(iso).toISOString().split("T")[0] : "-";
+		const values = {
+			fullname: employee.fullname || "-",
+			employment_type: employee.employment_type || "-",
+			position: employee.position || "-",
+			status: employee.status || "-",
+			nickname: employee.nickname || "-",
+			email: employee.email || "-",
+			gender: employee.gender || "-",
+			contact: employee.contact || "-",
+			birthday: employee.birthday ? formatDate(employee.birthday) : "-",
+			marital_status: employee.marital_status || "-",
+			address: employee.address || "-",
+			sss_no: employee.sss_number || "-",
+			pagibig_no: employee.pagibig || "-",
+			philhealth_no: employee.philhealth || "-",
+			emergency_name: employee.emergency_name || "-",
+			relationship: employee.relationship || "-",
+			emergency_address: employee.emergency_address || "-",
+			emergency_contact: employee.emergency_contact || "-",
+			city: employee.city || "-",
+			postal_code: employee.postal_code || "-",
+			gcash_no: employee.gcash_no || "-",
+		};
 
-    // Employee form fields
-    const fields = [
-        { name: "fullname", label: "Full Name *", defaultValue: employee.fullname || "-", disabled: true },
-        { name: "employment_type", label: "Employment Type *", defaultValue: employee.employment_type || "-", disabled: true },
-        { name: "position", label: "Position *", defaultValue: employee.position || "-", disabled: true },
-        { name: "status", label: "Status *", defaultValue: employee.status || "-", disabled: true },
-        { name: "nickname", label: "Preferred Name / Nickname", defaultValue: employee.nickname || "-", disabled: true },
-        { name: "email", label: "Email Address *", defaultValue: employee.email || "-", disabled: true },
-        { name: "gender", label: "Gender *", defaultValue: employee.gender || "-", disabled: true },
-        { name: "contact", label: "Contact No. *", defaultValue: employee.contact || "-", disabled: true },
-        { name: "birthday", label: "Birthday *", defaultValue: formatDate(employee.birthday), disabled: true },
-        { name: "marital_status", label: "Marital Status *", defaultValue: employee.marital_status || "-", disabled: true },
-        { name: "address", label: "Full Address *", defaultValue: employee.address || "-", fullWidth: true, disabled: true },
-        { name: "sss_no", label: "SSS No.", defaultValue: employee.sss_number || "-", disabled: true },
-        { name: "pagibig_no", label: "PAG-IBIG No.", defaultValue: employee.pagibig || "-", disabled: true },
-        { name: "philhealth_no", label: "PHILHEALTH No.", defaultValue: employee.philhealth || "-", disabled: true },
-        { name: "emergency_name", label: "Emergency Contact Name", defaultValue: employee.emergency_name || "-", disabled: true },
-        { name: "relationship", label: "Relationship", defaultValue: employee.relationship || "-", disabled: true },
-        { name: "emergency_address", label: "Emergency Address", defaultValue: employee.emergency_address || "-", disabled: true },
-        { name: "emergency_contact", label: "Emergency Contact No.", defaultValue: employee.emergency_contact || "-", disabled: true },
-        { name: "city", label: "City", defaultValue: employee.city || "-", disabled: true },
-        { name: "postal_code", label: "Postal Code", defaultValue: employee.postal_code || "-", disabled: true },
-        { name: "gcash_no", label: "Gcash No.", defaultValue: employee.gcash_no || "-", disabled: true },
-    ];
-    const contractFields = [
-        { key: "start_of_contract", title: "Start of Contract *" },
-        { key: "end_of_contract", title: "End of Contract *" },
-    ]
+		setFormValues(values);
+	}, [employee]);
 
-    const handleRetrieve = async () => {
-        if (isSubmitting) return;
-        setIsSubmitting(true);
-        setError("");
+	if (!isOpen) return null;
 
-        try {
-            const res = await fetch(`http://localhost:3001/api/${api}/${employeeId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status: "Employed" })
-            });
-            if (!res.ok) throw new Error("Retrieve failed");
+	if (!employee)
+		return (
+			<ModalContainer title="View Employee" width="3xl" variant="admin">
+				<p>Loading employee data...</p>
+			</ModalContainer>
+		);
 
-            const updatedEmployee = await res.json();
-            updateData(prev => prev.map(emp => emp.employee_id === employeeId ? updatedEmployee : emp));
-            onClose();
-        } catch (err) {
-            console.error("Failed to retrieve employee:", err);
-            setError("Failed to retrieve employee. Check console for details.");
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+	const fields = [
+		{ name: "fullname", label: "Full Name *", disabled: readOnly },
+		{ name: "employment_type", label: "Employment Type *", type: "select", options: ["Full-Time", "Part-Time"], disabled: readOnly },
+		{ name: "position", label: "Position *", type: "select", options: ["Crew", "Head Staff"], disabled: readOnly },
+		{ name: "status", label: "Status *", type: "select", options: ["Employed", "Probationary"], disabled: readOnly },
+		{ name: "nickname", label: "Preferred Name / Nickname", disabled: readOnly },
+		{ name: "email", label: "Email Address *", type: "email", disabled: readOnly },
+		{ name: "gender", label: "Gender *", type: "select", options: ["Male", "Female"], disabled: readOnly },
+		{ name: "contact", label: "Contact No. *", disabled: readOnly },
+		{ name: "birthday", label: "Birthday *", type: "date", disabled: readOnly },
+		{ name: "marital_status", label: "Marital Status *", type: "select", options: ["Single", "Married"], disabled: readOnly },
+		{ name: "address", label: "Full Address *", fullWidth: true, disabled: readOnly },
+		{
+			section: "Required Information for Full-Time Employees",
+			col: 3,
+			fields: [
+				{ name: "sss_no", label: "SSS No.", disabled: readOnly },
+				{ name: "pagibig_no", label: "PAG-IBIG No.", disabled: readOnly },
+				{ name: "philhealth_no", label: "PHILHEALTH No.", disabled: readOnly },
+			]
+		},
+		{
+			section: "Emergency Contact Person",
+			fields: [
+				{ name: "emergency_name", label: "Full Name *", disabled: readOnly },
+				{ name: "relationship", label: "Relationship *", disabled: readOnly },
+				{ name: "emergency_address", label: "Address *", disabled: readOnly },
+				{ name: "emergency_contact", label: "Contact No.", disabled: readOnly },
+				{ name: "city", label: "City *", disabled: readOnly },
+				{ name: "postal_code", label: "Postal Code *", disabled: readOnly },
+				{ name: "gcash_no", label: "Gcash No.", disabled: readOnly },
+			]
+		}
+	];
 
-    return (
-        <ModalContainer title="Retrieve Employee" width="3xl" variant="admin">
-            <Form
-                fields={fields}
-                onSubmit={handleRetrieve}
-                submitText="Retrieve"
-                cancelText="Close"
-                errorText={error}
-                contract={
-                    <Table columns={contractFields} data={empContract}></Table>
-                }
-                onCancel={() => onClose()}
-            />
-        </ModalContainer>
-    );
+	const contractFields = [
+		{ key: "start_of_contract", title: "Start of Contract *" },
+		{ key: "end_of_contract", title: "End of Contract *" }
+	];
+
+	const handleRetrieve = async () => {
+		if (isSubmitting) return;
+
+		setIsSubmitting(true);
+		setError("");
+
+		try {
+			const res = await fetch(`http://localhost:3001/api/${api}/${employeeId}`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ status: "Employed" })
+			});
+
+			if (!res.ok) throw new Error("Retrieve failed");
+
+			const updatedEmployee = await res.json();
+			updateData(prev => prev.map(emp => emp.employee_id === employeeId ? updatedEmployee : emp));
+			onClose();
+		} catch (err) {
+			console.error("Failed to retrieve employee:", err);
+			setError("Failed to retrieve employee. Check console for details.");
+		} finally {
+			setIsSubmitting(false);
+		}
+	};
+
+	const handleClose = () => {
+		setError("");
+		onClose();
+	};
+
+	return (
+		<ModalContainer title={"View Employee"} width="3xl" variant="admin">
+			<Form
+				fields={fields}
+				formValues={formValues}
+				onSubmit={handleRetrieve}
+				submitText={"Retrieve"}
+				cancelText={readOnly ? "Close" : "Cancel"}
+				contracts={<Table columns={contractFields} data={empContract || []} />}
+				errorText={Array.isArray(error) ? error : error ? error.split('.').map(s => s.trim()).filter(Boolean) : []}
+				onCancel={() => readOnly ? handleClose() : setReadOnly(true)}
+			/>
+		</ModalContainer>
+	);
 }

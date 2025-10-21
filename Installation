@@ -30,5 +30,5 @@ Backend Installation
     npm install bcrypt
     npm install nodemailer bcryptjs crypto
     npm install jsonwebtoken
-
+    npm install luxon
 

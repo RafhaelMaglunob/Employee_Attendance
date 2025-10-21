@@ -8,8 +8,14 @@ export async function sendEmployeeEmail(to, fullname, employeeId, tempPassword) 
             auth: {
                 user: process.env.GMAIL_ADDRESS,
                 pass: process.env.GMAIL_APP_PASSWORD,
-            }
+            },
+            logger: true,   // Logs SMTP activity to console
+            debug: true     // Show detailed debug info
         });
+
+        // Verify connection configuration
+        await transporter.verify();
+        console.log("SMTP Transporter is ready");
 
         const mail = {
             from: `"Your Company" <${process.env.GMAIL_ADDRESS}>`,
@@ -23,9 +29,10 @@ Your temporary password is: ${tempPassword}
 For security, this password will expire on first use. Please sign in and change your password immediately.`
         };
 
-        await transporter.sendMail(mail);
-        console.log("Email Sent to", to);
+        const info = await transporter.sendMail(mail);
+        console.log("Email sent successfully:", info.messageId);
     } catch (err) {
-        console.error("Email sending failed:", err.message);
+        console.error("Failed to send email:", err);
     }
 }
+

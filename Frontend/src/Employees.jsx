@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search } from './component/ui/search';
 import { applySearchAndFilter } from './component/utils/applySearchFilter';
-import { PaginatedTable } from './component/data/table'; // <-- Use PaginatedTable
+import { PaginatedTable } from './component/data/table';
 import { Card } from './component/ui/card';
 import { Button } from './component/ui/button';
 import { Filter } from './component/ui/filter';
@@ -44,10 +44,10 @@ function Employees() {
     const [isDeleteOpen, setIsDeleteOpen] = useState(false);
     const [isRetrieveOpen, setIsRetrieveOpen] = useState(false);
 
-    useEffect(() => { localStorage.setItem("employeeSortTable", selectedSort) }, [selectedSort]);
-    useEffect(() => { localStorage.setItem("employeeTab", activeTab) }, [activeTab]);
+    useEffect(() => { localStorage.setItem("employeeSortTable", selectedSort); }, [selectedSort]);
+    useEffect(() => { localStorage.setItem("employeeTab", activeTab); }, [activeTab]);
 
-    const handleView = (row) => { setSelectedId(row.employee_id); setIsViewOpen(true); };
+    const handleView = (row) => {console.log("selectedId:", row.employee_id); setSelectedId(row.employee_id); setIsViewOpen(true); };
     const handleRetrieve = (row) => { setSelectedId(row.employee_id); setIsRetrieveOpen(true); };
     const handleDelete = (row) => { setSelectedId(row.employee_id); setIsDeleteOpen(true); };
     const handleDocuments = (row) => {};
@@ -66,8 +66,54 @@ function Employees() {
         transformEmployee
     );
 
+    const filteredData = useMemo(() => {
+        let tempData = applySearchAndFilter(
+            data,
+            query,
+            ["employee_id", "name", "position", "type", "status"],
+            "",
+            ""
+        );
+
+        switch (selectedSort) {
+            case "(A-Z)":
+                tempData = tempData.sort((a, b) => a.name.localeCompare(b.name));
+                break;
+            case "(Z-A)":
+                tempData = tempData.sort((a, b) => b.name.localeCompare(a.name));
+                break;
+            case "Position":
+                tempData = tempData.sort((a, b) => a.position.localeCompare(b.position));
+                break;
+            case "Type":
+                tempData = tempData.sort((a, b) => a.type.localeCompare(b.type));
+                break;
+            case "Documents":
+                tempData = tempData.sort((a, b) => {
+                    if (a.documents_complete === b.documents_complete) return 0;
+                    return a.documents_complete ? -1 : 1; // Complete first
+                });
+                break;
+            case "Status":
+                tempData = tempData.sort((a, b) => a.status.localeCompare(b.status));
+                break;
+            default:
+                break;
+        }
+
+        return tempData;
+    }, [data, query, selectedSort]);
+
+
+    // Add numbering
+    const numberedData = filteredData.map((row, index) => ({ ...row, number: index + 1 }));
+
     const columns = [
-        { key: "employee_id", title: "Employee ID" },
+        {
+            key: "number",
+            title: "No.",
+            render: (row) => row.number
+        },
         { key: "name", title: "Name" },
         { key: "position", title: "Position" },
         { key: "type", title: "Type" },
@@ -110,19 +156,6 @@ function Employees() {
         }
     ];
 
-    const filteredData = useMemo(() => {
-        let tempData = applySearchAndFilter(data, query, ["employee_id", "name", "position", "type", "status"], "", "");
-
-        if (selectedSort === "ASC") {
-            tempData = tempData.sort((a, b) => a.employee_id.localeCompare(b.employee_id));
-        } else if (selectedSort === "DESC") {
-            tempData = tempData.sort((a, b) => b.employee_id.localeCompare(a.employee_id));
-        }
-
-        return tempData;
-    }, [data, query, selectedSort]);
-
-
     const headerContent = (
         <div className="flex items-center w-full gap-4">
             <div className="flex-1">
@@ -130,8 +163,12 @@ function Employees() {
             </div>
             <div className="w-[10%] flex-none">
                 <Filter value={selectedSort} className="text-black">
-                    <Button className="w-full text-left px-3 py-2 hover:bg-gray-100" onClick={() => setSelectedSort("ASC")}>ASC</Button>
-                    <Button className="w-full text-left px-3 py-2 hover:bg-gray-100" onClick={() => setSelectedSort("DESC")}>DESC</Button>
+                    <Button className="w-full text-left px-3 py-2 hover:bg-gray-100 border-b" onClick={() => setSelectedSort("(A-Z)")}>(A-Z)</Button>
+                    <Button className="w-full text-left px-3 py-2 hover:bg-gray-100 border-b" onClick={() => setSelectedSort("(Z-A)")}>(Z-A)</Button>
+                    <Button className="w-full text-left px-3 py-2 hover:bg-gray-100 border-b" onClick={() => setSelectedSort("Position")}>Position</Button>
+                    <Button className="w-full text-left px-3 py-2 hover:bg-gray-100 border-b" onClick={() => setSelectedSort("Type")}>Type</Button>
+                    <Button className="w-full text-left px-3 py-2 hover:bg-gray-100 border-b" onClick={() => setSelectedSort("Documents")}>Documents</Button>
+                    <Button className="w-full text-left px-3 py-2 hover:bg-gray-100 border-b" onClick={() => setSelectedSort("Status")}>Status</Button>
                 </Filter>
             </div>
         </div>
@@ -165,8 +202,7 @@ function Employees() {
                 </div>
 
                 <div className="mt-5">
-                    {/* Use PaginatedTable instead */}
-                    <PaginatedTable columns={columns} data={filteredData} itemsPerPage={itemsPerPage} />
+                    <PaginatedTable columns={columns} data={numberedData} itemsPerPage={itemsPerPage} />
                 </div>
             </Card>
 

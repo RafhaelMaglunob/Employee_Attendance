@@ -14,7 +14,7 @@ const sidebar = [
   {name: "Auditing", src: "../img/Auditing_Icon.png", alt:"Auditing Icon", path: "audit"},
   {name: "Salary", src: "../img/Salary_Icon.png", alt:"Salary Icon", path: "salary"},
   {name: "Incidents", src: "../img/Incidents_Icon.png", alt:"Incidents Icon", path: "incident"},
-  {name: "Reports", src: "../img/Reports_Icon.png", alt:"Reports Icon", path: "report"},
+  // {name: "Reports", src: "../img/Reports_Icon.png", alt:"Reports Icon", path: "report"},
   {name: "Scheduling", src: "../img/Schedule_Icon.png", alt:"Schedule Icon", path: "schedule"},
   {name: "Attendance", src: "../img/Attendance_Icon.png", alt:"Attendance Icon", path: "attendance"},
   {name: "Approvals", src: "../img/Approval_Icon.png", alt:"Approvals Icon", path: "approval"},
@@ -28,11 +28,15 @@ export default function AdminLayout() {
   
   const [path, setPath] = useState(savedPath || "dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const AdminHr_buttonPath = ["Dashboard", "Employees", "Auditing", "Salary", "Incidents", "Reports", "Approvals"]
+  const Admin_buttonPath = ["Dashboard", "Employees", "Auditing", "Salary", "Incidents", "Reports", "Approvals"]
+  const HR_buttonPath = ["Dashboard", "Employees", "Auditing", "Salary", "Incidents", "Reports", "Approvals"]
 
   const filteredSidebar = sidebar.filter(item => {
-    if (userRole === "admin" || userRole === "hr") {
-      return AdminHr_buttonPath.includes(item.name);
+    if (userRole === "admin") {
+      return Admin_buttonPath.includes(item.name);
+    }
+    if (userRole === "hr") {
+      return HR_buttonPath.includes(item.name);
     }
     return true;
   });
@@ -45,6 +49,9 @@ export default function AdminLayout() {
     Cookies.remove("auth_token");
     localStorage.removeItem("buttonPath");
     localStorage.removeItem("userRole");
+    localStorage.removeItem("userEmail");
+    localStorage.removeItem("employeeSortTable");
+    localStorage.removeItem("employeeTab");
     navigate("/login", { replace: true });
   };
 

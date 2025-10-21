@@ -2,8 +2,8 @@
 -- psql -U postgres
 
 -- Create database
-CREATE DATABASE employee_attendance;
-\c employee_attendance
+-- CREATE DATABASE employee_attendance;
+-- \c employee_attendance
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -181,7 +181,7 @@ CREATE TABLE incident_reports (
 -- Employee Accounts
 CREATE TABLE employee_account (
     account_id SERIAL PRIMARY KEY,
-    employee_id TEXT REFERENCES employees(employee_id),
+    employee_id TEXT REFERENCES employees(employee_id) ON DELETE CASCADE,
     email VARCHAR(100) UNIQUE NOT NULL,
     password VARCHAR(100) NOT NULL,
     must_change_password BOOLEAN DEFAULT TRUE
@@ -216,3 +216,11 @@ CREATE TABLE employee_attendance (
     total_hours DECIMAL(5,2) NOT NULL,
     status VARCHAR(100)
 );
+
+ALTER TABLE employees ADD COLUMN age INT;
+ALTER TABLE employees_archive ADD COLUMN age INT;
+
+ALTER TABLE audit_logs
+DROP CONSTRAINT audit_logs_employee_id_fkey,
+ADD CONSTRAINT audit_logs_employee_id_fkey
+FOREIGN KEY (employee_id) REFERENCES employees(employee_id) ON DELETE CASCADE;

@@ -39,7 +39,7 @@ function App() {
           <Route path="employee" element={<Employees />} />
           <Route path="audit" element={<Auditing />} />
           <Route path="salary" element={<Salary />} />
-          <Route path="report" element={<Reports />} />
+          {/* <Route path="report" element={<Reports />} /> */}
           <Route path="incident" element={<Incident />} />
           <Route path="schedule" element={<Scheduling />} />
           <Route path="attendance" element={<Attendance />} />

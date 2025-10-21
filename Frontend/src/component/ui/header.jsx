@@ -1,10 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 export default function Headers({ onLogout }) {
+  const userName = localStorage.getItem("userName");
+  const userEmail = localStorage.getItem("userEmail")
   const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (ref.current && !ref.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   return (
-    <div className="relative">
+    <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
         className="relative flex items-center rounded-full border-2"
@@ -32,8 +50,8 @@ export default function Headers({ onLogout }) {
       {open && (
         <div className="absolute right-0 mt-2 w-40 bg-white shadow-lg rounded-lg p-3 space-y-2 z-10">
           <div className="border-b pb-2">
-            <p className="text-base font-semibold">Profile</p>
-            <p className="text-xs text-gray-500">Email</p>
+            <p className="text-base font-semibold">{userName}</p>
+            <p className="text-xs text-gray-500">{userEmail}</p>
           </div>
 
           <div className="flex flex-row space-x-2 items-center">
