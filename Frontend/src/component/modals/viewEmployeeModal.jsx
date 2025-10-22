@@ -10,7 +10,6 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
     const [formValues, setFormValues] = useState({});
     const [initialFormValues, setInitialFormValues] = useState({});
     const [fieldErrors, setFieldErrors] = useState({});
-    const [dbError, setDbError] = useState("");
     const [readOnly, setReadOnly] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isRenewalOpen, setIsRenewalOpen] = useState(false);
@@ -32,7 +31,6 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
 
         setEmployee(null);
         setReadOnly(true);
-        setDbError("");
         setFieldErrors({});
 
         let isMounted = true;
@@ -213,7 +211,7 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
     };
 
     // ✅ Submit Handler
-    const handleSubmit = async (data) => {
+    const handleSubmit = async () => {
         if (readOnly) {
             setReadOnly(false);
             return;
@@ -221,48 +219,31 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
 
         if (isSubmitting) return;
         setIsSubmitting(true);
-        setDbError("");
+        setFieldErrors({});
 
         const allErrors = {};
-        Object.keys(formValues).forEach((f) => {
-            const err = validateSingleField(f, formValues[f], formValues);
-            if (err) allErrors[f] = err;
+
+        // Validate all visible/required fields
+        Object.keys(formValues).forEach((field) => {
+            const isContractField = ["contract_type", "contract_date", "start_of_contract", "end_of_contract"].includes(field);
+
+            // Only validate contract fields if renewal form is open
+            if (!isRenewalOpen && isContractField) return;
+
+            const error = validateSingleField(field, formValues[field], formValues);
+            if (error) allErrors[field] = error;
         });
+
         setFieldErrors(allErrors);
 
+        // If any errors exist, stop submission
         if (Object.keys(allErrors).length > 0) {
             setIsSubmitting(false);
             return;
         }
 
-        // 🧩 Date validation for contract fields
-        const start = new Date(formValues.contract_start);
-        const end = new Date(formValues.contract_end);
-
-        if (end < start) {
-            setFieldErrors({
-                ...allErrors,
-                contract_end: "End date cannot be before start date.",
-            });
-            setIsSubmitting(false);
-            return;
-        }
-
-        // 🧩 Amendment date validation (cannot be earlier than current contract end)
-        if (formValues.contract_type === "Amendment") {
-            const renewalDate = new Date(formValues.contract_date);
-            if (renewalDate <= end) {
-                setFieldErrors({
-                    ...allErrors,
-                    contract_date: "Amendment date must be later than current contract end date.",
-                });
-                setIsSubmitting(false);
-                return;
-            }
-        }
-
-        // 🧩 Clone and clean payload if renewal form is closed
-        const payload = { ...data };
+        // Prepare payload
+        const payload = { ...formValues };
         if (!isRenewalOpen) {
             delete payload.contract_type;
             delete payload.contract_date;
@@ -276,26 +257,40 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
             });
 
             const updated = await res.json();
+
             if (!res.ok) {
-                setDbError(updated.error || "Failed to update employee");
+                // Handle multiple field-specific errors from backend
+                if (updated.errors && Array.isArray(updated.errors)) {
+                    const newErrors = {};
+                    updated.errors.forEach(e => {
+                        newErrors[e.field] = e.error;
+                    });
+                    setFieldErrors(newErrors);
+                } else if (updated.field && updated.message) {
+                    setFieldErrors({ [updated.field]: updated.message });
+                }
+                setIsSubmitting(false);
                 return;
             }
 
-            setEmployee(updated);
-            setFormValues(updated);
+            // Update state with returned employee data
+            setInitialFormValues(updated.employee);
+            setEmployee(updated.employee);
+            setFormValues(updated.employee);
             setReadOnly(true);
-            if (typeof updateData === "function") updateData(updated);
+            if (typeof updateData === "function") updateData(updated.employee);
+
         } catch (err) {
             console.error(err);
-            setDbError(err.message || "Failed to update employee");
         } finally {
             setIsSubmitting(false);
         }
     };
 
+
+
     const handleClose = () => {
         setFieldErrors({});
-        setDbError("");
         onClose();
     };
 
@@ -433,7 +428,6 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
                 />
             )}
 
-            {dbError && <p className="text-red-500 mt-2">{dbError}</p>}
             {contractLoading && <p className="text-gray-400 mt-2">Loading contracts...</p>}
         </ModalContainer>
     );

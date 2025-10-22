@@ -11,6 +11,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Sequence for employee IDs
 CREATE SEQUENCE employee_id_seq START 1;
 
+-- Employee Registry
+CREATE TABLE employee_registry (
+    id SERIAL PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    fullname TEXT UNIQUE NOT NULL
+);
+
 -- Employees table
 CREATE TABLE employees (
     employee_id TEXT PRIMARY KEY DEFAULT 
@@ -217,6 +224,19 @@ CREATE TABLE employee_attendance (
     status VARCHAR(100)
 );
 
+CREATE TABLE email_queue (
+    id SERIAL PRIMARY KEY,
+    to_email VARCHAR(255) NOT NULL,
+    fullname VARCHAR(255),
+    employee_id INT,
+    temp_password VARCHAR(255),
+    status VARCHAR(20) DEFAULT 'pending', -- pending, sent, failed
+    error TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+
 ALTER TABLE employees ADD COLUMN age INT;
 ALTER TABLE employees_archive ADD COLUMN age INT;
 
@@ -224,3 +244,13 @@ ALTER TABLE audit_logs
 DROP CONSTRAINT audit_logs_employee_id_fkey,
 ADD CONSTRAINT audit_logs_employee_id_fkey
 FOREIGN KEY (employee_id) REFERENCES employees(employee_id) ON DELETE CASCADE;
+ALTER TABLE employee_contracts
+ALTER COLUMN start_of_contract DROP NOT NULL;
+
+ALTER TABLE employee_registry
+ADD CONSTRAINT unique_email_fullname UNIQUE (email, fullname);
+
+ALTER TABLE employees
+ADD COLUMN registry_id INT UNIQUE REFERENCES employee_registry(id) ON DELETE CASCADE;
+ALTER TABLE employees_archive
+ADD COLUMN registry_id INT UNIQUE REFERENCES employee_registry(id) ON DELETE CASCADE;

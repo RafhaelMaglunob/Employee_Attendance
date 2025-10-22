@@ -39,8 +39,10 @@ export function employeeController(pool) {
             start_of_contract, end_of_contract
         } = req.body;
 
+        const sanitizePhone = (val) =>
+            typeof val === "string" ? val.replace(/\s+/g, "") : val;
         const errors = [];
-        const phoneRegex = /^09\d{9}$/;
+        const phoneRegex = /^\+63\d{10}$/;
         const postalRegex = /^\d{4,5}$/;
         const textRegex = /^[A-Za-z\s'.-]+$/;   
         const emailRegex = /^[a-zA-Z0-9._%+-]+@(gmail\.com|yahoo\.com|outlook\.com|hotmail\.com|icloud\.com|edu\.ph|company\.ph)$/i;
@@ -54,7 +56,7 @@ export function employeeController(pool) {
         const safeEmploymentType = safe(employment_type);
         const safeStatus = safe(status);
         const safeGender = safe(gender);
-        const safeContact = safe(contact);
+        const safeContact = sanitizePhone(contact);
         const safeMarital = safe(marital_status);
         const safeBirthday = safe(birthday);
         const safeAddress = safe(address);
@@ -64,10 +66,10 @@ export function employeeController(pool) {
         const safeEmergencyName = safe(emergency_name);
         const safeRelationship = safe(relationship);
         const safeEmergencyAddress = safe(emergency_address);
-        const safeEmergencyContact = safe(emergency_contact);
+        const safeEmergencyContact = sanitizePhone(emergency_contact);
         const safeCity = safe(city);
         const safePostal = safe(postal_code);
-        const safeGcash = safe(gcash_no);
+        const safeGcash = sanitizePhone(gcash_no);
         const safeStart = safe(start_of_contract);
         const safeEnd = safe(end_of_contract);
 
@@ -104,28 +106,55 @@ export function employeeController(pool) {
 
         if (!safeContact || !phoneRegex.test(safeContact)) errors.push("Invalid contact number.");
         if (!safeEmergencyContact || !phoneRegex.test(safeEmergencyContact)) errors.push("Invalid emergency contact number.");
-        if (safeGcash && !phoneRegex.test(safeGcash)) errors.push("GCash number must start with 09 and be 11 digits.");
+        if (safeGcash && !phoneRegex.test(safeGcash)) errors.push("GCash number must start with +63 and be 12 digits.");
         if (safePostal && !postalRegex.test(safePostal)) errors.push("Postal code must be 4–5 digits only.");
         if (safeCity && !textRegex.test(safeCity)) errors.push("City must contain only letters.");
         if (safeRelationship && !textRegex.test(safeRelationship)) errors.push("Relationship must contain only letters.");
-
+        //console.log("Validation errors:", errors);
         if (errors.length > 0) return reply.status(400).send({ errors });
-
         const firstName = safeFullname.split(" ")[0]?.toUpperCase();
         const birthYear = new Date(safeBirthday).getFullYear();
         const tempPassword = `${firstName}-${birthYear}`;
         const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
+        
         const client = await pool.connect();
         try {
             await client.query("BEGIN");
+            const conflictCheck = await client.query(`
+                SELECT email, fullname
+                FROM employee_registry
+                WHERE email = $1 OR fullname = $2
+            `, [safeEmail, safeFullname]);
 
+            const conflicts = [];
+            if (conflictCheck.rows.some(r => r.email === safeEmail)) {
+                conflicts.push({ field: "email", error: "Email address already exists." });
+            }
+            if (conflictCheck.rows.some(r => r.fullname === safeFullname)) {
+                conflicts.push({ field: "fullname", error: "Full name already exists." });
+            }
+
+            // If any conflicts exist, rollback and return errors
+            if (conflicts.length > 0) {
+                await client.query("ROLLBACK");
+                return reply.status(400).send({ errors: conflicts });
+            }
+
+            // Insert into registry safely
+            const registry = await client.query(`
+                INSERT INTO employee_registry (email, fullname)
+                VALUES ($1, $2)
+                RETURNING id
+            `, [safeEmail, safeFullname]);
+
+            const registryId = registry.rows[0].id;
+            
             const empRes = await client.query(`
                 INSERT INTO employees 
-                (fullname, nickname, email, position, employment_type, status, gender, contact, marital_status, birthday, address, sss_number, pagibig, philhealth)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+                (registry_id, fullname, nickname, email, position, employment_type, status, gender, contact, marital_status, birthday, address, sss_number, pagibig, philhealth)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
                 RETURNING *;
-            `, [safeFullname, safeNickname, safeEmail, safePosition || '', safeEmploymentType, safeStatus, safeGender, safeContact, safeMarital, safeBirthday, safeAddress, safeSSS, safePagibig, safePhilhealth]);
+            `, [registryId, safeFullname, safeNickname, safeEmail, safePosition || '', safeEmploymentType, safeStatus, safeGender, safeContact, safeMarital, safeBirthday, safeAddress, safeSSS, safePagibig, safePhilhealth]);
 
             const employee = empRes.rows[0];
 
@@ -153,7 +182,7 @@ export function employeeController(pool) {
             await client.query("COMMIT");
 
             // Fire-and-forget email
-            sendEmployeeEmail(safeEmail, safeFullname, employee.employee_id, tempPassword)
+            sendEmployeeEmail(safeEmail, safeFullname, tempPassword)
                 .catch(err => console.warn("Email not sent:", err.message));
 
             return reply.send({ success: true, employee });
@@ -161,8 +190,18 @@ export function employeeController(pool) {
         } catch (err) {
             await client.query("ROLLBACK");
             if (err.code === "23505") {
-                if (err.constraint === "unique_fullname") return reply.status(400).send({ message: "Name already exists" });
-                if (err.constraint === "unique_email") return reply.status(400).send({ message: "Email already exists" });
+                if (err.constraint === "unique_fullname") {
+                    return reply.status(400).send({
+                        field: "fullname",
+                        error: "Full name already exists."
+                    });
+                }
+                if (err.constraint === "unique_email") {
+                    return reply.status(400).send({
+                        field: "email",
+                        error: "Email address already exists."
+                    });
+                }
             }
             console.error("Insert Error:", err.message);
             return reply.status(500).send({ error: "Failed to add employee" });
@@ -226,24 +265,47 @@ export function employeeController(pool) {
         try {
             await client.query('BEGIN');
 
-            // Combined email check
-            const arcRes = await client.query(
-                `SELECT 1 FROM employees_archive WHERE email = $1 AND employee_id != $2`, 
-                [email, id]
-            );
-            const employeeRes = await client.query(
-                `SELECT 1 FROM employees WHERE email = $1 AND employee_id != $2`, 
-                [email, id]
-            );
+            // Multi-field conflict check across employees and employees_archive
+            const conflictRows = [];
 
-            if (arcRes.rowCount > 0 || employeeRes.rowCount > 0) {
-                return reply.status(400).send({ field: "email", message: "Email is already used." });
+            // Check employees table
+            const empCheck = await client.query(`
+                SELECT email, fullname
+                FROM employees
+                WHERE (email = $1 OR fullname = $2) AND employee_id != $3
+            `, [email, fullname, id]);
+            conflictRows.push(...empCheck.rows);
+
+            // Check employees_archive table
+            const archiveCheck = await client.query(`
+                SELECT email, fullname
+                FROM employees_archive
+                WHERE email = $1 OR fullname = $2
+            `, [email, fullname]);
+            conflictRows.push(...archiveCheck.rows);
+
+            // Collect errors
+            const errors = [];
+            conflictRows.forEach(r => {
+                if (r.email === email && !errors.some(e => e.field === "email")) {
+                    errors.push({ field: "email", error: "Email already exists." });
+                }
+                if (r.fullname === fullname && !errors.some(e => e.field === "fullname")) {
+                    errors.push({ field: "fullname", error: "Full name already exists." });
+                }
+            });
+
+            if (errors.length > 0) {
+                await client.query('ROLLBACK');
+                return reply.status(400).send({ errors });
             }
 
+            // Fetch old employee
             const empRes = await client.query('SELECT * FROM employees WHERE employee_id=$1', [id]);
             if (!empRes.rows.length) throw new Error("Employee not found");
             const oldEmployee = empRes.rows[0];
 
+            // Update employees
             const updateRes = await client.query(`
                 UPDATE employees
                 SET fullname=$1, nickname=$2, email=$3, position=$4, employment_type=$5,
@@ -255,13 +317,15 @@ export function employeeController(pool) {
 
             const updatedEmployee = updateRes.rows[0];
 
+            // Update dependents
             await client.query(`
                 UPDATE employee_dependents
                 SET fullname=$1, relationship=$2, address=$3, contact=$4,
                     city=$5, postalcode=$6, gcash_number=$7
                 WHERE employee_id=$8;
             `, [emergency_name, relationship, emergency_address, emergency_contact, city, postal_code, gcash_no, id]);
-            
+
+            // Insert contract if provided
             if (contract_date && contract_type){
                 await client.query(`
                     INSERT INTO employee_contracts(employee_id, end_of_contract, contract_type)
@@ -269,8 +333,22 @@ export function employeeController(pool) {
                 `, [id, contract_date, contract_type]);
             }
 
+            const dependentsRes = await client.query(
+                `SELECT fullname AS emergency_name, relationship, address AS emergency_address,
+                        contact AS emergency_contact, city, postalcode AS city, gcash_number AS gcash_no
+                FROM employee_dependents
+                WHERE employee_id = $1`,
+                [id]
+            );
+
+            const updatedEmployeeWithDependents = {
+                ...updatedEmployee,
+                ...dependentsRes.rows[0], // assuming only 1 dependent
+            };
+
             await client.query('COMMIT');
-            
+
+            // Send email if changed
             if (oldEmployee.email !== email) {
                 const firstName = fullname.split(" ")[0]?.toUpperCase();
                 const birthYear = new Date(birthday).getFullYear();
@@ -279,13 +357,23 @@ export function employeeController(pool) {
                     .catch(err => console.warn("Email not sent:", err.message));
             }
 
-            reply.send({ success: true, employee: updatedEmployee });
+            reply.send({ success: true, employee: updatedEmployeeWithDependents });
 
         } catch (err) {
             await client.query('ROLLBACK');
-            if(err.code === "23505"){
-                if(err.constraint === "unique_fullname") return reply.status(400).send({ message: "Name already exists" });
-                if(err.constraint === "unique_email") return reply.status(400).send({ message: "Email already exists" });
+            if (err.code === "23505") {
+                if (err.constraint === "unique_fullname") {
+                    return reply.status(400).send({
+                        field: "fullname",
+                        error: "Full name already exists."
+                    });
+                }
+                if (err.constraint === "unique_email") {
+                    return reply.status(400).send({
+                        field: "email",
+                        error: "Email address already exists."
+                    });
+                }
             }
             console.error("Update Error:", err.message);
             reply.status(500).send({ error: "Failed to update employee" });
@@ -293,6 +381,7 @@ export function employeeController(pool) {
             client.release();
         }
     };
+
 
     const deleteEmployee = async (req, reply) => {
         const { id } = req.params;
