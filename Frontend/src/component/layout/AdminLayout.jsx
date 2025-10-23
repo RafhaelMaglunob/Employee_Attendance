@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Outlet, Link, useNavigate } from "react-router-dom";
 import { Sidebar } from "./Container.jsx";
-import { NavBar } from "./NavBar.jsx";
+import { NavBar } from "./Navbar.jsx";
 import Background from "../ui/Background.jsx";
 import Headers from "../ui/header.jsx";
 import { Button } from "../ui/button.jsx";

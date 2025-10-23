@@ -1,42 +1,69 @@
-import { Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import Cookies from "js-cookie";
+import Background from "../ui/Background";
+import Navbar from "./Navbar";
 
 export default function EmployeeLayout() {
-    const handleLogout = () => {
-        Cookies.remove("auth_token");
-        window.location.href = "/employee-login";
-    };
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState("home");
 
-    return (
-        <div className="min-h-screen flex flex-col">
-            <NavBar
-                className="flex sticky top-0 z-40 items-center border-b-8 border-b-[#5E451D]"
-                variant={userRole}
-            >
-                <button className="flex md:hidden ml-4" onClick={() => setSidebarOpen(!sidebarOpen)}>
-                    <svg
-                    className="h-6 w-6 text-gray-700"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    >
-                    <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M4 6h16M4 12h16M4 18h16"
-                    />
-                    </svg>
-                </button>
-    
-                <div className="flex flex-row justify-between w-full mr-10 space-x-4 relative">
-                    <img src="../img/TheCrunchLogoMnoBG 1.png" className="w-auto object-contain" />
-                    <div className="flex flex-row items-center space-x-2 relative">
-                    <img src="../img/Notification.png" alt="Notification Icon" className="w-5 h-5" />
-                    <Headers onLogout={handleLogout}/>
-                    </div>
-                </div>
-            </NavBar>
-        </div>
-    );
+  const handleLogout = () => {
+    Cookies.remove("auth_token");
+    navigate("/employee-login", { replace: true });
+  };
+
+  useEffect(() => {
+    if (location.pathname.includes("dashboard")) setActiveTab("home");
+    else if (location.pathname.includes("requests")) setActiveTab("requests");
+    else if (location.pathname.includes("notifications")) setActiveTab("notifications");
+    else if (location.pathname.includes("more")) setActiveTab("more");
+  }, [location.pathname]);
+
+  const getTitle = () => {
+    switch (activeTab) {
+      case "home": return "Home";
+      case "requests": return "Requests";
+      case "notifications": return "Notifications";
+      case "more": return "More";
+      default: return "Home";
+    }
+  };
+
+  return (
+    <div className="relative w-full h-screen overflow-hidden flex flex-col">
+      <Background />
+
+      {/* HEADER */}
+      <header className="bg-[#FFC629] flex items-center justify-between px-4 py-2 border-b-4 border-[#5E451D] fixed top-0 w-full z-20">
+        {/* Logo */}
+        <img
+          src="../img/TheCrunchLogoMnoBG 1.png"
+          alt="Logo"
+          className="w-10 h-10 object-contain"
+        />
+
+        {/* Page Title */}
+        <h1 className="text-[#5E451D] font-bold text-lg">{getTitle()}</h1>
+
+        {/* User Icon with Logout */}
+        <button
+          onClick={handleLogout}
+          className="w-7 h-7 flex items-center justify-center rounded-full bg-[#5E451D] text-[#FFC629] font-bold"
+          title="Logout"
+        >
+          ⎋
+        </button>
+      </header>
+
+      {/* MAIN CONTENT */}
+      <main className="flex-1 overflow-y-auto pt-[70px] pb-[70px] p-4 relative z-10">
+        <Outlet />
+      </main>
+
+      {/* NAVBAR */}
+      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+    </div>
+  );
 }

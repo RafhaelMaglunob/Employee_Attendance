@@ -1,16 +1,17 @@
-import React from 'react'
-import Background from './component/ui/Background'
-import { NavBar } from './component/layout/NavBar'
-
-function EmployeeDashboard() {
+export default function EmployeeDashboard() {
   return (
-    <div>
-      <p>WELCOME</p>
-      <NavBar>
+    <div className="flex flex-col items-center gap-4">
+      <div className="bg-[#FFC629] shadow-[6px_6px_0px_#5E451D] rounded-2xl p-6 w-full max-w-md text-[#5E451D] text-center font-semibold">
+        Welcome back 👋
+      </div>
 
-      </NavBar>
+      <div className="bg-[#FFC629] shadow-[6px_6px_0px_#5E451D] rounded-2xl p-6 w-full max-w-md text-[#5E451D] text-center font-semibold">
+        Attendance Summary
+      </div>
+
+      <div className="bg-[#FFC629] shadow-[6px_6px_0px_#5E451D] rounded-2xl p-6 w-full max-w-md text-[#5E451D] text-center font-semibold">
+        Upcoming Schedule
+      </div>
     </div>
-  )
+  );
 }
-
-export default EmployeeDashboard

@@ -47,12 +47,18 @@ function App() {
         </Route>
 
         <Route path="/employee-login" element={<EmployeeLogin />} />
-        <Route path="/employee" element={
-          <ProtectedEmployeeRoute>
-            <EmployeeLayout />
-          </ProtectedEmployeeRoute>
-        }>
+        <Route
+          path="/employee"
+          element={
+            <ProtectedEmployeeRoute>
+              <EmployeeLayout />
+            </ProtectedEmployeeRoute>
+          }
+        >
           <Route path="dashboard" element={<EmployeeDashboard />} />
+          <Route path="requests" element={<EmployeeRequests />} />
+          <Route path="notifications" element={<EmployeeNotifications />} />
+          <Route path="more" element={<EmployeeMore />} />
         </Route>
       </Routes>
     </Router>
