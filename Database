@@ -19,7 +19,7 @@ CREATE TABLE employee_registry (
 );
 
 -- Employees table
-CREATE TABLE employees (
+CREATE TABLE IF NOT EXISTS employees (
     employee_id TEXT PRIMARY KEY DEFAULT 
         'TCBS' || TO_CHAR(NOW(), 'YYYY') || '-' || LPAD(nextval('employee_id_seq')::text, 4, '0'),
     fullname VARCHAR(100),
@@ -71,7 +71,7 @@ ALTER TABLE employees ADD CONSTRAINT unique_email UNIQUE(email);
 ALTER TABLE employees ADD CONSTRAINT unique_fullname UNIQUE(fullname);
 
 -- Employee Documents
-CREATE TABLE employee_documents (
+CREATE TABLE IF NOT EXISTS employee_documents (
     document_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     employee_id TEXT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
     sss_id VARCHAR(255),
@@ -85,7 +85,7 @@ CREATE TABLE employee_documents (
 );
 
 -- Employee Dependents
-CREATE TABLE employee_dependents (
+CREATE TABLE IF NOT EXISTS employee_dependents (
     id SERIAL PRIMARY KEY,
     employee_id TEXT REFERENCES employees(employee_id) ON DELETE CASCADE,
     fullname VARCHAR(100),
@@ -98,7 +98,7 @@ CREATE TABLE employee_dependents (
 );
 
 -- Archive Employees (independent of original employees)
-CREATE TABLE employees_archive (
+CREATE TABLE IF NOT EXISTS employees_archive (
     employee_id TEXT PRIMARY KEY,
     fullname VARCHAR(100),
     nickname VARCHAR(50),
@@ -119,7 +119,7 @@ CREATE TABLE employees_archive (
     CONSTRAINT unique_employee_archive_row UNIQUE(employee_id, fullname, email)
 );
 
-CREATE TABLE employee_contracts_archive (
+CREATE TABLE IF NOT EXISTS employee_contracts_archive (
     contract_id SERIAL PRIMARY KEY,
     employee_id VARCHAR(20) REFERENCES employees(employee_id) ON DELETE CASCADE,
     start_of_contract DATE NOT NULL,
@@ -130,7 +130,7 @@ CREATE TABLE employee_contracts_archive (
 );
 
 -- Archive Employee Documents (FK points to archive, NOT original)
-CREATE TABLE employee_documents_archive (
+CREATE TABLE IF NOT EXISTS employee_documents_archive (
     document_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     employee_id TEXT NOT NULL REFERENCES employees_archive(employee_id) ON DELETE CASCADE,
     sss_id VARCHAR(255),
@@ -144,7 +144,7 @@ CREATE TABLE employee_documents_archive (
 );
 
 -- Archive Employee Dependents (FK points to archive)
-CREATE TABLE employee_dependents_archive (
+CREATE TABLE IF NOT EXISTS employee_dependents_archive (
     id SERIAL PRIMARY KEY,
     employee_id TEXT REFERENCES employees_archive(employee_id) ON DELETE CASCADE,
     fullname VARCHAR(100),
@@ -157,7 +157,7 @@ CREATE TABLE employee_dependents_archive (
 );
 
 -- Audit Logs
-CREATE TABLE audit_logs (
+CREATE TABLE IF NOT EXISTS audit_logs (
     log_id SERIAL PRIMARY KEY,
     employee_id TEXT REFERENCES employees(employee_id),
     action VARCHAR(255) NOT NULL,
@@ -166,7 +166,7 @@ CREATE TABLE audit_logs (
 );
 
 -- Work Logs
-CREATE TABLE employee_work_logs (
+CREATE TABLE IF NOT EXISTS employee_work_logs (
     log_id SERIAL PRIMARY KEY,
     employee_id TEXT REFERENCES employees(employee_id),
     work_date DATE NOT NULL,
@@ -174,7 +174,7 @@ CREATE TABLE employee_work_logs (
 );
 
 -- Incident Reports
-CREATE TABLE incident_reports (
+CREATE TABLE IF NOT EXISTS incident_reports (
     incident_id SERIAL PRIMARY KEY,
     employee_id TEXT REFERENCES employees(employee_id),
     incident_type VARCHAR(100),
@@ -186,7 +186,7 @@ CREATE TABLE incident_reports (
 );
 
 -- Employee Accounts
-CREATE TABLE employee_account (
+CREATE TABLE IF NOT EXISTS employee_account (
     account_id SERIAL PRIMARY KEY,
     employee_id TEXT REFERENCES employees(employee_id) ON DELETE CASCADE,
     email VARCHAR(100) UNIQUE NOT NULL,
@@ -194,7 +194,7 @@ CREATE TABLE employee_account (
     must_change_password BOOLEAN DEFAULT TRUE
 );
 
-CREATE TABLE employee_account_archive (
+CREATE TABLE IF NOT EXISTS employee_account_archive (
     account_id SERIAL PRIMARY KEY,
     employee_id TEXT,
     email VARCHAR(100),
@@ -204,7 +204,7 @@ CREATE TABLE employee_account_archive (
 );
 
 -- Admin Accounts
-CREATE TABLE admin_account (
+CREATE TABLE IF NOT EXISTS admin_account (
     admin_id SERIAL PRIMARY KEY,
     fullname VARCHAR(100),
     email VARCHAR(100) UNIQUE NOT NULL,
@@ -214,7 +214,7 @@ CREATE TABLE admin_account (
 );
 
 -- Attendance
-CREATE TABLE employee_attendance (
+CREATE TABLE IF NOT EXISTS employee_attendance (
     attendance_id SERIAL PRIMARY KEY,
     employee_id TEXT REFERENCES employees(employee_id),
     attend_date DATE NOT NULL,
@@ -222,18 +222,6 @@ CREATE TABLE employee_attendance (
     clock_out TIME NOT NULL,
     total_hours DECIMAL(5,2) NOT NULL,
     status VARCHAR(100)
-);
-
-CREATE TABLE email_queue (
-    id SERIAL PRIMARY KEY,
-    to_email VARCHAR(255) NOT NULL,
-    fullname VARCHAR(255),
-    employee_id INT,
-    temp_password VARCHAR(255),
-    status VARCHAR(20) DEFAULT 'pending', -- pending, sent, failed
-    error TEXT,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 
@@ -244,7 +232,10 @@ ALTER TABLE audit_logs
 DROP CONSTRAINT audit_logs_employee_id_fkey,
 ADD CONSTRAINT audit_logs_employee_id_fkey
 FOREIGN KEY (employee_id) REFERENCES employees(employee_id) ON DELETE CASCADE;
+
 ALTER TABLE employee_contracts
+ALTER COLUMN start_of_contract DROP NOT NULL;
+ALTER TABLE employee_contracts_archive
 ALTER COLUMN start_of_contract DROP NOT NULL;
 
 ALTER TABLE employee_registry
@@ -254,3 +245,15 @@ ALTER TABLE employees
 ADD COLUMN registry_id INT UNIQUE REFERENCES employee_registry(id) ON DELETE CASCADE;
 ALTER TABLE employees_archive
 ADD COLUMN registry_id INT UNIQUE REFERENCES employee_registry(id) ON DELETE CASCADE;
+ALTER TABLE employees ADD COLUMN is_synced BOOLEAN DEFAULT false;
+
+ALTER TABLE employee_contracts_archive
+ALTER COLUMN start_of_contract DROP NOT NULL;
+ALTER TABLE employee_contracts_archive
+ALTER COLUMN end_of_contract DROP NOT NULL;
+
+ALTER TABLE employee_dependents
+ADD CONSTRAINT employee_dependents_employee_id_unique UNIQUE (employee_id);
+
+ALTER TABLE employee_contracts
+ALTER COLUMN end_of_contract DROP NOT NULL;

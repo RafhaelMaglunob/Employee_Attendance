@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import { ModalContainer } from "../ui/modal";
 import { Form } from "../form/Form";
-import { Button } from "../ui/button";
 
 export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
     const [formValues, setFormValues] = useState({});
@@ -48,10 +47,24 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
                 break;
 
             case "sss_no":
+                if (allValues.employment_type === "Full-Time") {
+                    if (!value) return "SSS No. is required";
+                    if (!/^\d{2}-\d{7}-\d$/.test(value)) return "SSS must be in format XX-XXXXXXX-X";
+                }
+                break;
+
             case "pagibig_no":
+                if (allValues.employment_type === "Full-Time") {
+                    if (!value) return "PAG-IBIG No. is required";
+                    if (!/^\d{4}-\d{4}-\d{4}$/.test(value)) return "PAG-IBIG must be in format XXXX-XXXX-XXXX";
+                }
+                break;
+
             case "philhealth_no":
-                if (allValues.employment_type === "Full-Time" && !value)
-                    return `${name.replace("_", " ").toUpperCase()} is required`;
+                if (allValues.employment_type === "Full-Time") {
+                    if (!value) return "PhilHealth No. is required";
+                    if (!/^\d{2}-\d{9}-\d$/.test(value)) return "PhilHealth must be in format XX-XXXXXXXXX-X";
+                }
                 break;
 
             case "start_of_contract":
@@ -68,33 +81,88 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
         if (name === "end_of_contract" && allValues.start_of_contract && value) {
             const start = new Date(allValues.start_of_contract);
             const end = new Date(value);
-            if (end < start) return "End date cannot be before start date";
+
+            if (end.getTime() <= start.getTime()) {
+                return "End date must be after start date"; // now strictly after
+            }
         }
+
 
         return "";
     };
 
+    
     // ✅ Live field change + formatting
-    const handleFieldChange = (name, value) => {
-        let formatted = value;
+    const handleFieldChange = (name, value, inputRef) => {
+        let digits = value.replace(/\D/g, ""); // raw digits only
+        let formatted = "";
+        let cursorPos = inputRef?.current?.selectionStart || 0;
 
-        if (["contact", "emergency_contact", "gcash_no"].includes(name)) {
-            let digits = value.replace(/\D/g, "");
-            if (digits.startsWith("0")) digits = "63" + digits.slice(1);
-            if (!digits.startsWith("63")) digits = "63" + digits;
-            digits = digits.slice(0, 12);
-            const local = digits.slice(2);
-            formatted = "+63";
-            if (local.length >= 3) formatted += " " + local.slice(0, 3);
-            if (local.length >= 6) formatted += " " + local.slice(3, 6);
-            if (local.length >= 10) formatted += " " + local.slice(6, 10);
+        // SSS: XX-XXXXXXX-X
+        if (name === "sss_no") {
+            if (digits.length > 10) digits = digits.slice(0, 10);
+            if (digits.length > 7) formatted = digits.replace(/^(\d{2})(\d{7})(\d{1})$/, "$1-$2-$3");
+            else if (digits.length > 2) formatted = digits.replace(/^(\d{2})(\d+)/, "$1-$2");
+            else formatted = digits;
         }
 
+        // PhilHealth: XX-XXXXXXXXX-X
+        else if (name === "philhealth_no") {
+            if (digits.length > 12) digits = digits.slice(0, 12);
+            if (digits.length > 10) formatted = digits.replace(/^(\d{2})(\d{9})(\d{1})$/, "$1-$2-$3");
+            else if (digits.length > 2) formatted = digits.replace(/^(\d{2})(\d+)/, "$1-$2");
+            else formatted = digits;
+        }
+
+        // Pag-IBIG: XXXX-XXXX-XXX
+        else if (name === "pagibig_no") {
+            if (digits.length > 12) digits = digits.slice(0, 12);
+            if (digits.length > 8) formatted = digits.replace(/^(\d{4})(\d{4})(\d{4})$/, "$1-$2-$3");
+            else if (digits.length > 4) formatted = digits.replace(/^(\d{4})(\d+)/, "$1-$2");
+            else formatted = digits;
+        }
+
+        // Phone numbers: +63 XXX XXX XXXX
+        else if (["contact", "emergency_contact", "gcash_no"].includes(name)) {
+            if (digits.startsWith("63")) digits = digits.slice(2);
+            if (digits.length > 10) digits = digits.slice(0, 10);
+
+            formatted = "+63";
+            if (digits.length > 0) formatted += " " + digits.slice(0, 3);
+            if (digits.length > 3) formatted += " " + digits.slice(3, 6);
+            if (digits.length > 6) formatted += " " + digits.slice(6, 10);
+
+            // Adjust cursor for spaces
+            if (inputRef?.current) {
+                const rawCursorPos = value
+                    .slice(0, cursorPos)
+                    .replace(/\D/g, "").length;
+                let newCursorPos = rawCursorPos;
+
+                if (rawCursorPos > 0) newCursorPos += 4; // +63 and first space
+                if (rawCursorPos > 3) newCursorPos += 1; // second space
+                if (rawCursorPos > 6) newCursorPos += 1; // third space
+
+                setTimeout(() => {
+                    inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+                }, 0);
+            }
+        }
+
+        // Other string fields: keep as-is
+        else {
+            formatted = value;
+        }
+
+        // Update form state
         setFormValues((prev) => ({ ...prev, [name]: formatted }));
 
+        // Validate field
         const err = validateSingleField(name, formatted, { ...formValues, [name]: formatted });
         setFieldErrors((prev) => ({ ...prev, [name]: err }));
     };
+
+
 
     // ✅ Submit Handler
     const handleSubmit = async (data) => {

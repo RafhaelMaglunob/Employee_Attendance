@@ -50,9 +50,10 @@ export function Table({ columns, data, className }) {
   );
 }
 
-export function PaginatedTable({ columns, data, itemsPerPage = 5, className }) {
+export function PaginatedTable({ columns, data, itemsPerPage = 5, className, readOnly = false }) {
   const [currentPage, setCurrentPage] = useState(1);
   const totalPages = Math.ceil(data.length / itemsPerPage);
+  const isDataEmpty = !data || data.length === 0;
 
   const paginatedData = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -71,6 +72,8 @@ export function PaginatedTable({ columns, data, itemsPerPage = 5, className }) {
   const handlePageChange = (page) => {
     if (page >= 1 && page <= totalPages) setCurrentPage(page);
   };
+
+  const isDisabled = isDataEmpty || readOnly; // all buttons disabled if readOnly or no data
 
   return (
     <div className={`overflow-x-auto ${className || ""}`}>
@@ -125,16 +128,20 @@ export function PaginatedTable({ columns, data, itemsPerPage = 5, className }) {
         </p>
         <div className="flex space-x-1 items-center">
           <Button
+            type="button"
             onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
+            disabled={isDisabled || currentPage === 1}
             className="bg-black text-white px-4 py-1 rounded text-sm"
           >
             Previous
           </Button>
+
           {getPageNumbers().map((num) => (
             <Button
+              type="button"
               key={num}
               onClick={() => handlePageChange(num)}
+              disabled={isDisabled}
               className={`px-2 py-1 rounded text-sm ${
                 currentPage === num ? "bg-black text-white" : "bg-black/60 text-white"
               }`}
@@ -142,9 +149,11 @@ export function PaginatedTable({ columns, data, itemsPerPage = 5, className }) {
               {num}
             </Button>
           ))}
+
           <Button
+            type="button"
             onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
+            disabled={isDisabled || currentPage === totalPages}
             className="bg-black text-white px-4 py-1 rounded text-sm"
           >
             Next

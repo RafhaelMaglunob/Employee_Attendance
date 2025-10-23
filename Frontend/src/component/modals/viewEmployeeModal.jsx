@@ -391,8 +391,8 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
                     cancelText={readOnly ? "Close" : "Cancel"}
                     contracts={
                         <div className="flex flex-col w-full space-y-3 items-center">
-                            <PaginatedTable className="w-full" columns={contractFields} data={numberedContracts} itemsPerPage={5} />
-                            {!readOnly && (
+                            <PaginatedTable className="w-full" columns={contractFields} data={numberedContracts} itemsPerPage={5} readOnly={readOnly} />
+                            {!readOnly && formValues.employment_type?.toLowerCase() === "part-time" && (
                                 <Button
                                     type="button"
                                     onClick={() => {

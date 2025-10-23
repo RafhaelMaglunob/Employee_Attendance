@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import { sendEmployeeEmail } from '../utils/sendEmail.js';
 import { scheduleEmployeeDeletion } from '../utils/employeeDeletionScheduler.js';
 import { calculateAge } from '../utils/calculateAge.js';
+import { syncRow, deleteRow } from '../utils/syncToSupabase.js';
 
 export function employeeController(pool) {
 
@@ -39,171 +40,255 @@ export function employeeController(pool) {
             start_of_contract, end_of_contract
         } = req.body;
 
-        const sanitizePhone = (val) =>
-            typeof val === "string" ? val.replace(/\s+/g, "") : val;
+        // --- Sanitizers ---
+        const sanitizePhone = val => typeof val === "string" ? val.replace(/\s+/g, "") : val;
+        const safe = val => (typeof val === "string" ? val.trim() : val);
+
+        const safeData = {
+            fullname: safe(fullname),
+            nickname: safe(nickname),
+            email: safe(email),
+            position: safe(position),
+            employment_type: safe(employment_type),
+            status: safe(status),
+            gender: safe(gender),
+            contact: sanitizePhone(contact),
+            marital_status: safe(marital_status),
+            birthday: safe(birthday),
+            address: safe(address),
+            sss_no: safe(sss_no),
+            pagibig_no: safe(pagibig_no),
+            philhealth_no: safe(philhealth_no),
+            emergency_name: safe(emergency_name),
+            relationship: safe(relationship),
+            emergency_address: safe(emergency_address),
+            emergency_contact: sanitizePhone(emergency_contact),
+            city: safe(city),
+            postal_code: safe(postal_code),
+            gcash_no: sanitizePhone(gcash_no),
+            start_of_contract: safe(start_of_contract),
+            end_of_contract: safe(end_of_contract)
+        };
+
+        // --- Validation ---
         const errors = [];
         const phoneRegex = /^\+63\d{10}$/;
         const postalRegex = /^\d{4,5}$/;
-        const textRegex = /^[A-Za-z\s'.-]+$/;   
+        const textRegex = /^[A-Za-z\s'.-]+$/;
         const emailRegex = /^[a-zA-Z0-9._%+-]+@(gmail\.com|yahoo\.com|outlook\.com|hotmail\.com|icloud\.com|edu\.ph|company\.ph)$/i;
 
-        const safe = (val) => (typeof val === "string" ? val.trim() : val);
+        if (!safeData.fullname || !textRegex.test(safeData.fullname)) errors.push("Full name is required and must contain only letters.");
+        if (!safeData.email) errors.push("Email is required.");
+        else if (!emailRegex.test(safeData.email)) errors.push("Email must be valid and from allowed domains.");
+        if (!safeData.employment_type) errors.push("Employment type is required.");
+        if (!safeData.status) errors.push("Status is required.");
+        if (!safeData.gender) errors.push("Gender is required.");
+        if (!safeData.birthday) errors.push("Birthday is required.");
 
-        const safeFullname = safe(fullname);
-        const safeNickname = safe(nickname);
-        const safeEmail = safe(email);
-        const safePosition = safe(position);
-        const safeEmploymentType = safe(employment_type);
-        const safeStatus = safe(status);
-        const safeGender = safe(gender);
-        const safeContact = sanitizePhone(contact);
-        const safeMarital = safe(marital_status);
-        const safeBirthday = safe(birthday);
-        const safeAddress = safe(address);
-        const safeSSS = safe(sss_no);
-        const safePagibig = safe(pagibig_no);
-        const safePhilhealth = safe(philhealth_no);
-        const safeEmergencyName = safe(emergency_name);
-        const safeRelationship = safe(relationship);
-        const safeEmergencyAddress = safe(emergency_address);
-        const safeEmergencyContact = sanitizePhone(emergency_contact);
-        const safeCity = safe(city);
-        const safePostal = safe(postal_code);
-        const safeGcash = sanitizePhone(gcash_no);
-        const safeStart = safe(start_of_contract);
-        const safeEnd = safe(end_of_contract);
-
-        // === VALIDATION ===
-        if (!safeFullname || !textRegex.test(safeFullname)) errors.push("Full name is required and must contain only letters.");
-        if (!safeEmail) errors.push("Email is required.");
-        else if (!emailRegex.test(safeEmail)) errors.push("Email must be valid and from allowed domains.");
-        if (!safeEmploymentType) errors.push("Employment type is required.");
-        if (!safeStatus) errors.push("Status is required.");
-        if (!safeGender) errors.push("Gender is required.");
-        if (!safeBirthday) errors.push("Birthday is required.");
-
-        const birthdate = new Date(safeBirthday);
+        const birthdate = new Date(safeData.birthday);
         const today = new Date();
         if (birthdate.toString() === "Invalid Date") errors.push("Invalid birthday format.");
         else if (birthdate > today) errors.push("Birthday cannot be in the future.");
 
-        const empAge = calculateAge(birthday);
-        if(empAge < 15) errors.push("Employee must be at least 18 years old.");
+        const empAge = calculateAge(safeData.birthday);
+        if(empAge < 18) errors.push("Employee must be at least 18 years old.");
 
-        if (safeEmploymentType?.toLowerCase() === "full-time") {
-            if (!safeSSS) errors.push("SSS No. is required for Full-Time employees.");
-            if (!safePagibig) errors.push("PAG-IBIG No. is required for Full-Time employees.");
-            if (!safePhilhealth) errors.push("PHILHEALTH No. is required for Full-Time employees.");
+        if (safeData.employment_type?.toLowerCase() === "full-time") {
+            if (!safeData.sss_no) errors.push("SSS No. is required for Full-Time employees.");
+            if (!safeData.pagibig_no) errors.push("PAG-IBIG No. is required for Full-Time employees.");
+            if (!safeData.philhealth_no) errors.push("PHILHEALTH No. is required for Full-Time employees.");
         }
 
-        if (safeEmploymentType?.toLowerCase() === "part-time") {
-            if (!safeStart) errors.push("Start of contract is required for Part-Time employees.");
-            if (!safeEnd) errors.push("End of contract is required for Part-Time employees.");
-            if (safeStart && safeEnd && new Date(safeEnd) < new Date(safeStart)) {
+        if (safeData.employment_type?.toLowerCase() === "part-time") {
+            if (!safeData.start_of_contract) errors.push("Start of contract is required for Part-Time employees.");
+            if (!safeData.end_of_contract) errors.push("End of contract is required for Part-Time employees.");
+            if (safeData.start_of_contract && safeData.end_of_contract &&
+                new Date(safeData.end_of_contract) < new Date(safeData.start_of_contract)) {
                 errors.push("End of contract cannot be before start of contract.");
             }
         }
 
-        if (!safeContact || !phoneRegex.test(safeContact)) errors.push("Invalid contact number.");
-        if (!safeEmergencyContact || !phoneRegex.test(safeEmergencyContact)) errors.push("Invalid emergency contact number.");
-        if (safeGcash && !phoneRegex.test(safeGcash)) errors.push("GCash number must start with +63 and be 12 digits.");
-        if (safePostal && !postalRegex.test(safePostal)) errors.push("Postal code must be 4–5 digits only.");
-        if (safeCity && !textRegex.test(safeCity)) errors.push("City must contain only letters.");
-        if (safeRelationship && !textRegex.test(safeRelationship)) errors.push("Relationship must contain only letters.");
-        //console.log("Validation errors:", errors);
+        if (!safeData.contact || !phoneRegex.test(safeData.contact)) errors.push("Invalid contact number.");
+        if (!safeData.emergency_contact || !phoneRegex.test(safeData.emergency_contact)) errors.push("Invalid emergency contact number.");
+        if (safeData.gcash_no && !phoneRegex.test(safeData.gcash_no)) errors.push("GCash number must start with +63 and be 12 digits.");
+        if (safeData.postal_code && !postalRegex.test(safeData.postal_code)) errors.push("Postal code must be 4–5 digits only.");
+        if (safeData.city && !textRegex.test(safeData.city)) errors.push("City must contain only letters.");
+        if (safeData.relationship && !textRegex.test(safeData.relationship)) errors.push("Relationship must contain only letters.");
+
         if (errors.length > 0) return reply.status(400).send({ errors });
-        const firstName = safeFullname.split(" ")[0]?.toUpperCase();
-        const birthYear = new Date(safeBirthday).getFullYear();
+
+        // --- Password Setup ---
+        const firstName = safeData.fullname.split(" ")[0]?.toUpperCase();
+        const birthYear = new Date(safeData.birthday).getFullYear();
         const tempPassword = `${firstName}-${birthYear}`;
         const hashedPassword = await bcrypt.hash(tempPassword, 10);
-        
+
         const client = await pool.connect();
+
         try {
             await client.query("BEGIN");
+
+            // --- Conflict Check ---
             const conflictCheck = await client.query(`
                 SELECT email, fullname
                 FROM employee_registry
                 WHERE email = $1 OR fullname = $2
-            `, [safeEmail, safeFullname]);
+            `, [safeData.email, safeData.fullname]);
 
             const conflicts = [];
-            if (conflictCheck.rows.some(r => r.email === safeEmail)) {
-                conflicts.push({ field: "email", error: "Email address already exists." });
-            }
-            if (conflictCheck.rows.some(r => r.fullname === safeFullname)) {
-                conflicts.push({ field: "fullname", error: "Full name already exists." });
-            }
-
-            // If any conflicts exist, rollback and return errors
+            if (conflictCheck.rows.some(r => r.email === safeData.email)) conflicts.push({ field: "email", error: "Email address already exists." });
+            if (conflictCheck.rows.some(r => r.fullname === safeData.fullname)) conflicts.push({ field: "fullname", error: "Full name already exists." });
             if (conflicts.length > 0) {
                 await client.query("ROLLBACK");
                 return reply.status(400).send({ errors: conflicts });
             }
 
-            // Insert into registry safely
+            // --- Insert Registry ---
             const registry = await client.query(`
                 INSERT INTO employee_registry (email, fullname)
                 VALUES ($1, $2)
-                RETURNING id
-            `, [safeEmail, safeFullname]);
+                RETURNING *
+            `, [safeData.email, safeData.fullname]);
+            const registryRow = registry.rows[0];
 
-            const registryId = registry.rows[0].id;
-            
+            // --- Insert Employee ---
             const empRes = await client.query(`
-                INSERT INTO employees 
+                INSERT INTO employees
                 (registry_id, fullname, nickname, email, position, employment_type, status, gender, contact, marital_status, birthday, address, sss_number, pagibig, philhealth)
                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-                RETURNING *;
-            `, [registryId, safeFullname, safeNickname, safeEmail, safePosition || '', safeEmploymentType, safeStatus, safeGender, safeContact, safeMarital, safeBirthday, safeAddress, safeSSS, safePagibig, safePhilhealth]);
-
+                RETURNING *
+            `, [
+                registryRow.id, safeData.fullname, safeData.nickname, safeData.email, safeData.position || '',
+                safeData.employment_type, safeData.status, safeData.gender, safeData.contact,
+                safeData.marital_status, safeData.birthday, safeData.address, safeData.sss_no,
+                safeData.pagibig_no, safeData.philhealth_no
+            ]);
             const employee = empRes.rows[0];
 
-            // Fire-and-forget DB inserts
-            if (safeEmploymentType?.toLowerCase() === "part-time") {
-                client.query(`
+            // --- Optional Inserts ---
+            let contract = null, dependent = null, account = null;
+
+            if (safeData.employment_type?.toLowerCase() === "part-time") {
+                const empContract = await client.query(`
                     INSERT INTO employee_contracts
                     (employee_id, start_of_contract, end_of_contract, contract_type)
                     VALUES ($1,$2,$3,$4)
-                `, [employee.employee_id, safeStart, safeEnd, "Part-Time"]);
+                    RETURNING *
+                `, [employee.employee_id, safeData.start_of_contract, safeData.end_of_contract, "Part-Time"]);
+                contract = empContract.rows[0];
+            } else if (safeData.employment_type?.toLowerCase() === "full-time") {
+                const startDate = safeData.start_of_contract || new Date(); // default to today
+
+                const empContract = await client.query(`
+                    INSERT INTO employee_contracts
+                    (employee_id, start_of_contract, end_of_contract, contract_type)
+                    VALUES ($1, $2, NULL, $3)
+                    RETURNING *
+                `, [employee.employee_id, startDate, "Full-Time"]);
+
+                contract = empContract.rows[0];
             }
 
-            client.query(`
-                INSERT INTO employee_dependents 
-                (employee_id, fullname, relationship, address, contact, city, postalcode, gcash_number)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8);
-            `, [employee.employee_id, safeEmergencyName, safeRelationship, safeEmergencyAddress, safeEmergencyContact, safeCity, safePostal, safeGcash]);
 
-            client.query(`
+
+            const empDep = await client.query(`
+                INSERT INTO employee_dependents
+                (employee_id, fullname, relationship, address, contact, city, postalcode, gcash_number)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                RETURNING *
+            `, [
+                employee.employee_id, safeData.emergency_name, safeData.relationship,
+                safeData.emergency_address, safeData.emergency_contact,
+                safeData.city, safeData.postal_code, safeData.gcash_no
+            ]);
+            dependent = empDep.rows[0];
+
+            const empAcc = await client.query(`
                 INSERT INTO employee_account
                 (employee_id, email, password, must_change_password)
-                VALUES ($1, $2, $3, true);
-            `, [employee.employee_id, safeEmail, hashedPassword]);
+                VALUES ($1,$2,$3,true)
+                RETURNING *
+            `, [employee.employee_id, safeData.email, hashedPassword]);
+            account = empAcc.rows[0];
 
             await client.query("COMMIT");
 
-            // Fire-and-forget email
-            sendEmployeeEmail(safeEmail, safeFullname, tempPassword)
+            // --- Sync to Supabase ---
+            await syncRow('employee_registry', {
+                id: registryRow.id,
+                email: registryRow.email,
+                fullname: registryRow.fullname
+            }, 'id');
+
+            await syncRow('employees', {
+                employee_id: employee.employee_id,
+                registry_id: employee.registry_id,
+                fullname: employee.fullname,
+                nickname: employee.nickname,
+                email: employee.email,
+                position: employee.position,
+                employment_type: employee.employment_type,
+                status: employee.status,
+                gender: employee.gender,
+                contact: employee.contact,
+                marital_status: employee.marital_status,
+                birthday: employee.birthday,
+                address: employee.address,
+                sss_number: employee.sss_number,
+                pagibig: employee.pagibig,
+                philhealth: employee.philhealth,
+                effective_deletion_date: employee.effective_deletion_date || null,
+                deletion_status: employee.deletion_status || null
+            }, 'employee_id');
+            
+            if (dependent) {
+                await syncRow('employee_dependents', {
+                    employee_id: dependent.employee_id,
+                    fullname: dependent.fullname,
+                    relationship: dependent.relationship,
+                    address: dependent.address,
+                    contact: dependent.contact,
+                    city: dependent.city,
+                    postalcode: dependent.postalcode,
+                    gcash_number: dependent.gcash_number
+                }); // no conflict key
+            }
+
+
+            if (contract) {
+                await syncRow('employee_contracts', {
+                    contract_id: contract.contract_id,
+                    employee_id: contract.employee_id,
+                    start_of_contract: contract.start_of_contract,
+                    end_of_contract: contract.end_of_contract,
+                    contract_type: contract.contract_type
+                }, 'contract_id');
+            }
+
+            if (account) {
+                await syncRow('employee_account', {
+                    account_id: account.account_id,
+                    employee_id: account.employee_id,
+                    email: account.email,
+                    password: account.password,
+                    must_change_password: account.must_change_password
+                }, 'account_id');
+            }
+
+
+            // --- Fire-and-forget email ---
+            sendEmployeeEmail(safeData.email, safeData.fullname, tempPassword)
                 .catch(err => console.warn("Email not sent:", err.message));
 
             return reply.send({ success: true, employee });
 
         } catch (err) {
             await client.query("ROLLBACK");
-            if (err.code === "23505") {
-                if (err.constraint === "unique_fullname") {
-                    return reply.status(400).send({
-                        field: "fullname",
-                        error: "Full name already exists."
-                    });
-                }
-                if (err.constraint === "unique_email") {
-                    return reply.status(400).send({
-                        field: "email",
-                        error: "Email address already exists."
-                    });
-                }
-            }
             console.error("Insert Error:", err.message);
+            if (err.code === "23505") {
+                if (err.constraint === "unique_fullname") return reply.status(400).send({ field: "fullname", error: "Full name already exists." });
+                if (err.constraint === "unique_email") return reply.status(400).send({ field: "email", error: "Email address already exists." });
+            }
             return reply.status(500).send({ error: "Failed to add employee" });
         } finally {
             client.release();
@@ -335,7 +420,7 @@ export function employeeController(pool) {
 
             const dependentsRes = await client.query(
                 `SELECT fullname AS emergency_name, relationship, address AS emergency_address,
-                        contact AS emergency_contact, city, postalcode AS city, gcash_number AS gcash_no
+                        contact AS emergency_contact, city, postalcode AS postal_code, gcash_number AS gcash_no
                 FROM employee_dependents
                 WHERE employee_id = $1`,
                 [id]

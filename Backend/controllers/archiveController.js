@@ -1,3 +1,5 @@
+import { syncRow, deleteRow } from '../utils/syncToSupabase.js';
+
 export function archiveController(pool) {
     const getAllArchives = async (req, reply) => {
         try {
@@ -78,6 +80,9 @@ export function archiveController(pool) {
         }
     };
 
+    /**
+     * Retrieve archived employee, restore to main tables, sync to Supabase, and delete archives
+     */
     const retrieveEmployee = async (req, reply) => {
         const { id } = req.params;
         const { status } = req.body;
@@ -86,86 +91,90 @@ export function archiveController(pool) {
         try {
             await client.query('BEGIN');
 
-            const { rowCount: empCount } = await client.query(
-                'SELECT 1 FROM employees_archive WHERE employee_id = $1', [id]
-            );
-            if (!empCount) {
+            // Fetch archived employee
+            const { rows: empRows } = await client.query('SELECT * FROM employees_archive WHERE employee_id = $1', [id]);
+            if (!empRows.length) {
                 await client.query('ROLLBACK');
                 return reply.status(404).send({ error: 'Employee not found in archive' });
             }
+            const employee = empRows[0];
 
-            // Fire-and-forget inserts/updates
-            client.query(`
+            // 1️⃣ Insert employee first
+            await client.query(`
                 INSERT INTO employees (
                     employee_id, fullname, nickname, email, position, employment_type, status, current_status,
-                    gender, contact, birthday, marital_status, address, sss_number, pagibig, philhealth
+                    gender, contact, birthday, marital_status, address, sss_number, pagibig, philhealth, effective_deletion_date
+                ) VALUES (
+                    $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NULL
                 )
-                SELECT 
-                    employee_id, fullname, nickname, email, position, employment_type, $1, $1,
-                    gender, contact, birthday, marital_status, address, sss_number, pagibig, philhealth
-                FROM employees_archive
-                WHERE employee_id = $2
-                ON CONFLICT (employee_id) DO NOTHING
-            `, [status, id]).catch(console.warn);
+            `, [
+                employee.employee_id, employee.fullname, employee.nickname, employee.email, employee.position,
+                employee.employment_type, status, status, employee.gender, employee.contact, employee.birthday,
+                employee.marital_status, employee.address, employee.sss_number, employee.pagibig, employee.philhealth
+            ]);
+            console.log(`✅ Employee restored locally: ${employee.employee_id}`);
 
-            client.query(`
-                UPDATE employees
-                SET effective_deletion_date = NULL
-                WHERE employee_id = $1
-            `, [id]).catch(console.warn);
+            // Sync employee to Supabase
+            await syncRow('employees', { ...employee, status }, 'employee_id');
+            console.log(`✅ Employee synced to Supabase: ${employee.employee_id}`);
 
-            client.query(`
-                UPDATE employee_contracts
-                SET end_of_contract = NOW() + INTERVAL '1 year'
-                WHERE employee_id = $1 AND end_of_contract <= NOW();
-            `, [id]).catch(console.warn);
+            // 2️⃣ Restore contracts
+            const { rows: contracts } = await client.query('SELECT * FROM employee_contracts_archive WHERE employee_id = $1', [id]);
+            for (const c of contracts) {
+                await client.query(`
+                    INSERT INTO employee_contracts (contract_id, employee_id, start_of_contract, end_of_contract, contract_type)
+                    VALUES ($1,$2,$3,$4,$5)
+                `, [c.contract_id, c.employee_id, c.start_of_contract, c.end_of_contract, c.contract_type]);
+                await syncRow('employee_contracts', c, 'contract_id');
+                console.log(`✅ Contract synced to Supabase: ${c.contract_id}`);
+            }
 
-            client.query(`
-                INSERT INTO employee_contracts (
-                    employee_id, start_of_contract, end_of_contract, contract_type
-                )
-                SELECT employee_id, start_of_contract, end_of_contract, contract_type
-                FROM employee_contracts_archive
-                WHERE employee_id = $1
-            `, [id]).catch(console.warn);
+            // 3️⃣ Restore dependents
+            const { rows: dependents } = await client.query('SELECT * FROM employee_dependents_archive WHERE employee_id = $1', [id]);
+            for (const d of dependents) {
+                await client.query(`
+                    INSERT INTO employee_dependents (employee_id, fullname, relationship, address, contact, city, postalcode, gcash_number)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                `, [d.employee_id, d.fullname, d.relationship, d.address, d.contact, d.city, d.postalcode, d.gcash_number]);
+                await syncRow('employee_dependents', d, 'id'); // use PK for ON CONFLICT
+                console.log(`✅ Dependent synced to Supabase: ${d.id}`);
+            }
 
-            client.query(`
-                INSERT INTO employee_dependents (
-                    employee_id, fullname, relationship, address, contact, city, postalcode, gcash_number
-                )
-                SELECT employee_id, fullname, relationship, address, contact, city, postalcode, gcash_number
-                FROM employee_dependents_archive
-                WHERE employee_id = $1
-            `, [id]).catch(console.warn);
+            // 4️⃣ Restore documents
+            const { rows: documents } = await client.query('SELECT * FROM employee_documents_archive WHERE employee_id = $1', [id]);
+            for (const doc of documents) {
+                await client.query(`
+                    INSERT INTO employee_documents (employee_id, sss_id, resume_cv, pagibig, philhealth, barangay_clearance, status)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7)
+                `, [doc.employee_id, doc.sss_id, doc.resume_cv, doc.pagibig, doc.philhealth, doc.barangay_clearance, doc.status]);
+                await syncRow('employee_documents', doc, 'document_id'); // use PK for ON CONFLICT
+                console.log(`✅ Document synced to Supabase: ${doc.document_id}`);
+            }
 
-            client.query(`
-                INSERT INTO employee_documents (
-                    employee_id, sss_id, resume_cv, pagibig, philhealth, barangay_clearance, status
-                )
-                SELECT employee_id, sss_id, resume_cv, pagibig, philhealth, barangay_clearance, status
-                FROM employee_documents_archive
-                WHERE employee_id = $1
-            `, [id]).catch(console.warn);
+            // 5️⃣ Delete archives only after everything is restored
+            await client.query('DELETE FROM employee_contracts_archive WHERE employee_id = $1', [id]);
+            await deleteRow('employee_contracts_archive', 'contract_id', id);
 
-            // Delete archives after moving
-            client.query('DELETE FROM employee_contracts_archive WHERE employee_id = $1', [id]).catch(console.warn);
-            client.query('DELETE FROM employee_dependents_archive WHERE employee_id = $1', [id]).catch(console.warn);
-            client.query('DELETE FROM employee_documents_archive WHERE employee_id = $1', [id]).catch(console.warn);
-            client.query('DELETE FROM employees_archive WHERE employee_id = $1', [id]).catch(console.warn);
+            await client.query('DELETE FROM employee_dependents_archive WHERE employee_id = $1', [id]);
+            await deleteRow('employee_dependents_archive', 'id', id);
+
+            await client.query('DELETE FROM employee_documents_archive WHERE employee_id = $1', [id]);
+            await deleteRow('employee_documents_archive', 'document_id', id);
+
+            await client.query('DELETE FROM employees_archive WHERE employee_id = $1', [id]);
+            await deleteRow('employees_archive', 'employee_id', id);
+
+            console.log(`🗑️ Archives deleted locally and from Supabase for employee: ${id}`);
+
 
             await client.query('COMMIT');
 
-            const { rows: [employee] } = await client.query('SELECT * FROM employees WHERE employee_id = $1', [id]);
-            const { rows: contracts } = await client.query('SELECT * FROM employee_contracts WHERE employee_id = $1', [id]);
-            const { rows: dependents } = await client.query('SELECT * FROM employee_dependents WHERE employee_id = $1', [id]);
-            const { rows: documents } = await client.query('SELECT * FROM employee_documents WHERE employee_id = $1', [id]);
-
-            reply.send({ ...employee, contracts, dependents, documents });
+            reply.send({ employee, contracts, dependents, documents });
 
         } catch (err) {
             await client.query('ROLLBACK');
-            console.error(err);
-            reply.status(500).send({ error: "Failed to retrieve employee" });
+            console.error("Failed to retrieve and restore employee:", err);
+            reply.status(500).send({ error: "Failed to retrieve and restore employee" });
         } finally {
             client.release();
         }

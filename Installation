@@ -31,4 +31,5 @@ Backend Installation
     npm install nodemailer bcryptjs crypto
     npm install jsonwebtoken
     npm install luxon
+    npm install @supabase/supabase-js
 
