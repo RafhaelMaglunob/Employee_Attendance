@@ -11,20 +11,23 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
 	const [readOnly, setReadOnly] = useState(true);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
-	// Fetch archived contracts
+	const transformContract = (emp) => ({
+		start_of_contract: emp.start_of_contract,
+		end_of_contract: emp.end_of_contract,
+	});
+
 	const { data: empContract } = useFetchData(
-		employeeId ? `http://localhost:3001/api/${api}/contract/${employeeId}` : null,
-		(emp) => {
-			// ensure it is always an array
-			if (!emp) return [];
-			return Array.isArray(emp)
-				? emp.map(c => ({
-						start_of_contract: c.start_of_contract,
-						end_of_contract: c.end_of_contract
-				  }))
-				: [{ start_of_contract: emp.start_of_contract, end_of_contract: emp.end_of_contract }];
-		}
+		`http://localhost:3001/api/archive/contract/${employeeId}`,
+		transformContract
 	);
+
+	// Log empContract whenever it updates
+	// useEffect(() => {
+	// 	if (empContract) {
+	// 		console.log("Fetched employee contracts:", empContract);
+	// 	}
+	// }, [empContract]);
+
 
 	// Fetch employee data
 	useEffect(() => {

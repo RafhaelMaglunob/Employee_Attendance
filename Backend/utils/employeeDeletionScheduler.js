@@ -34,6 +34,16 @@ export const deleteEmployeeNow = async (pool, employee) => {
 
         const statusToArchive = employee.effective_deletion_date ? employee.status : "End of Contract";
 
+        // 0️⃣ Ensure full-time resigned/terminated employees have an end_of_contract
+        const { rowCount } = await client.query(`
+            UPDATE employee_contracts
+            SET end_of_contract = NOW()
+            WHERE employee_id = $1
+            AND (end_of_contract IS NULL OR end_of_contract > NOW())
+            AND LOWER(contract_type) = 'full-time'
+        `, [employee.employee_id]);
+        console.log(`✅ Updated ${rowCount} full-time contracts with end_of_contract = NOW() for employee ${employee.employee_id}`);
+
         // --- 1️⃣ Archive employee ---
         const { rows: archivedEmployees } = await client.query(`
             INSERT INTO employees_archive

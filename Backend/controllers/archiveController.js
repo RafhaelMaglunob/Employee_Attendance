@@ -80,6 +80,8 @@ export function archiveController(pool) {
         }
     };
 
+
+
     /**
      * Retrieve archived employee, restore to main tables, sync to Supabase, and delete archives
      */
@@ -153,16 +155,22 @@ export function archiveController(pool) {
 
             // 5️⃣ Delete archives only after everything is restored
             await client.query('DELETE FROM employee_contracts_archive WHERE employee_id = $1', [id]);
-            await deleteRow('employee_contracts_archive', 'contract_id', id);
+            for (const c of contracts) {
+                await deleteRow('employee_contracts_archive', 'contract_id', c.contract_id);
+            }
 
             await client.query('DELETE FROM employee_dependents_archive WHERE employee_id = $1', [id]);
-            await deleteRow('employee_dependents_archive', 'id', id);
+            for (const d of dependents) {
+                await deleteRow('employee_dependents_archive', 'id', d.id);
+            }
 
             await client.query('DELETE FROM employee_documents_archive WHERE employee_id = $1', [id]);
-            await deleteRow('employee_documents_archive', 'document_id', id);
+            for (const doc of documents) {
+                await deleteRow('employee_documents_archive', 'document_id', doc.document_id);
+            }
 
             await client.query('DELETE FROM employees_archive WHERE employee_id = $1', [id]);
-            await deleteRow('employees_archive', 'employee_id', id);
+            await deleteRow('employees_archive', 'employee_id', employee.employee_id);
 
             console.log(`🗑️ Archives deleted locally and from Supabase for employee: ${id}`);
 
