@@ -36,7 +36,6 @@ function Login() {
             Cookies.set("auth_token", data.token, { expires: 1 });
             localStorage.setItem("userRole", data.data.role);
             localStorage.setItem("userEmail", data.data.email);
-            localStorage.setItem("userName", data.data.fullname);
             navigate("/dashboard", { replace: true }); 
         }
     };

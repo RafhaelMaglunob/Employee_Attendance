@@ -17,7 +17,10 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
         switch (name) {
             case "fullname":
                 if (!value.trim()) return "Full name is required";
+                if (/\d/.test(value)) return "Full name cannot contain numbers";
+                if (!/^[A-Za-z\s'.-]+$/.test(value)) return "Full name contains invalid characters";
                 break;
+
 
             case "email":
                 if (!value) return "Email is required";
@@ -126,7 +129,9 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
         else if (["contact", "emergency_contact", "gcash_no"].includes(name)) {
             if (digits.startsWith("63")) digits = digits.slice(2);
             if (digits.length > 10) digits = digits.slice(0, 10);
-
+            if (digits === " " || digits === "6") {
+                return "+63 ";
+            }
             formatted = "+63";
             if (digits.length > 0) formatted += " " + digits.slice(0, 3);
             if (digits.length > 3) formatted += " " + digits.slice(3, 6);
@@ -177,11 +182,23 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 
         setIsSubmitting(true);
 
+        const cleanedData = { ...data };
+
+        ["contact", "emergency_contact", "gcash_no"].forEach((key) => {
+            if (cleanedData[key]) {
+                let digits = cleanedData[key].replace(/\D/g, "");
+                if (digits.startsWith("0")) digits = digits.slice(1);
+                digits = digits.slice(-10);
+
+                cleanedData[key] = "63" + digits;
+            }
+        });
+
         try {
             const res = await fetch("http://localhost:3001/api/employees", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data),
+                body: JSON.stringify(cleanedData),
             });
 
             const result = await res.json();
@@ -334,6 +351,7 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
                 formValues={formValues}
                 onFieldChange={handleFieldChange}
                 onSubmit={handleSubmit}
+                disabled={isSubmitting}
                 submitText={isSubmitting ? "Adding..." : "Add Employee"}
                 cancelText="Cancel"
                 onCancel={handleClose}

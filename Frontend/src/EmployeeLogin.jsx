@@ -23,6 +23,10 @@ function EmployeeLogin() {
             setError(data.error || "Login failed");
         } else {
             Cookies.set("auth_token", data.token || "", { expires: 1 });
+            localStorage.setItem("employee-id", data.data.employee_id);
+            localStorage.setItem("employeeEmail", data.data.email);
+            localStorage.setItem("employeeRole", data.data.role);
+            localStorage.setItem("employeeId", data.data.employee_id);
             navigate("/employee/dashboard", { replace: true });
         }
     };
@@ -51,7 +55,7 @@ function EmployeeLogin() {
                         <div className="flex flex-col space-y-3 px-4 py-4">
                             <h1 className="text-center font-bold text-2xl mb-3">Login with PIN</h1>
 
-                            <label className="text-sm text-gray-700">Employee ID</label>
+                            <label className="text-sm text-gray-700">Email</label>
                             <input
                                 type="email"
                                 value={email}

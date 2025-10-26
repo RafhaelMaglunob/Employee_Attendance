@@ -72,7 +72,7 @@ export function employeeController(pool) {
 
         // --- Validation ---
         const errors = [];
-        const phoneRegex = /^\+63\d{10}$/;
+        const phoneRegex = /^63\d{10}$/;
         const postalRegex = /^\d{4,5}$/;
         const textRegex = /^[A-Za-z\s'.-]+$/;
         const emailRegex = /^[a-zA-Z0-9._%+-]+@(gmail\.com|yahoo\.com|outlook\.com|hotmail\.com|icloud\.com|edu\.ph|company\.ph)$/i;
@@ -204,77 +204,59 @@ export function employeeController(pool) {
             dependent = empDep.rows[0];
 
             const empAcc = await client.query(`
-                INSERT INTO employee_account
-                (employee_id, email, password, must_change_password)
-                VALUES ($1,$2,$3,true)
+                INSERT INTO users
+                (employee_id, email, fullname, role, password, must_change_password)
+                VALUES ($1,$2,$3,$4,$5,true)
                 RETURNING *
-            `, [employee.employee_id, safeData.email, hashedPassword]);
+            `, [employee.employee_id, safeData.email, safeData.fullname, safeData.position, hashedPassword]);
             account = empAcc.rows[0];
 
             await client.query("COMMIT");
 
-            // --- Sync to Supabase ---
-            await syncRow('employee_registry', {
-                id: registryRow.id,
-                email: registryRow.email,
-                fullname: registryRow.fullname
-            }, 'id');
+            try {
+                // 1️⃣ Sync registry first
+                await syncRow(
+                    'employee_registry',
+                    { id: registryRow.id, email: registryRow.email, fullname: registryRow.fullname },
+                    'id'
+                );
 
-            await syncRow('employees', {
-                employee_id: employee.employee_id,
-                registry_id: employee.registry_id,
-                fullname: employee.fullname,
-                nickname: employee.nickname,
-                email: employee.email,
-                position: employee.position,
-                employment_type: employee.employment_type,
-                status: employee.status,
-                gender: employee.gender,
-                contact: employee.contact,
-                marital_status: employee.marital_status,
-                birthday: employee.birthday,
-                address: employee.address,
-                sss_number: employee.sss_number,
-                pagibig: employee.pagibig,
-                philhealth: employee.philhealth,
-                effective_deletion_date: employee.effective_deletion_date || null,
-                deletion_status: employee.deletion_status || null
-            }, 'employee_id');
-            
-            if (dependent) {
-                await syncRow('employee_dependents', {
-                    employee_id: dependent.employee_id,
-                    fullname: dependent.fullname,
-                    relationship: dependent.relationship,
-                    address: dependent.address,
-                    contact: dependent.contact,
-                    city: dependent.city,
-                    postalcode: dependent.postalcode,
-                    gcash_number: dependent.gcash_number
-                }); // no conflict key
+                // 2️⃣ Sync employee
+                await syncRow(
+                    'employees',
+                    {
+                        employee_id: employee.employee_id,
+                        registry_id: employee.registry_id,
+                        fullname: employee.fullname,
+                        nickname: employee.nickname,
+                        email: employee.email,
+                        position: employee.position,
+                        employment_type: employee.employment_type,
+                        status: employee.status,
+                        gender: employee.gender,
+                        contact: employee.contact,
+                        marital_status: employee.marital_status,
+                        birthday: employee.birthday,
+                        address: employee.address,
+                        sss_number: employee.sss_number,
+                        pagibig: employee.pagibig,
+                        philhealth: employee.philhealth
+                    },
+                    'employee_id'
+                );
+
+                // 3️⃣ Sync contracts & dependents concurrently (both depend on employee)
+                await Promise.all([
+                    contract ? syncRow('employee_contracts', contract, 'contract_id') : Promise.resolve(),
+                    dependent ? syncRow('employee_dependents', dependent) : Promise.resolve()
+                ]);
+
+                // 4️⃣ Sync users (depends on employee)
+                await syncRow('users', account, 'account_id');
+
+            } catch (err) {
+                console.warn("Supabase sync error:", err.message);
             }
-
-
-            if (contract) {
-                await syncRow('employee_contracts', {
-                    contract_id: contract.contract_id,
-                    employee_id: contract.employee_id,
-                    start_of_contract: contract.start_of_contract,
-                    end_of_contract: contract.end_of_contract,
-                    contract_type: contract.contract_type
-                }, 'contract_id');
-            }
-
-            if (account) {
-                await syncRow('employee_account', {
-                    account_id: account.account_id,
-                    employee_id: account.employee_id,
-                    email: account.email,
-                    password: account.password,
-                    must_change_password: account.must_change_password
-                }, 'account_id');
-            }
-
 
             // --- Fire-and-forget email ---
             sendEmployeeEmail(safeData.email, safeData.fullname, tempPassword)
@@ -479,24 +461,39 @@ export function employeeController(pool) {
 
         const client = await pool.connect();
         try {
-            await client.query('BEGIN');
+            await client.query("BEGIN");
 
-            const res = await client.query('SELECT * FROM employees WHERE employee_id = $1', [id]);
-            if (!res.rowCount) return reply.status(404).send({ error: 'Employee not found' });
+            const res = await client.query("SELECT * FROM employees WHERE employee_id = $1", [id]);
+            if (!res.rowCount) {
+                await client.query("ROLLBACK");
+                return reply.status(404).send({ error: "Employee not found" });
+            }
+
+            const employee = res.rows[0];
 
             await client.query(
-                'UPDATE employees SET effective_deletion_date = $1, deletion_status = $2 WHERE employee_id = $3',
+                `
+                UPDATE employees
+                SET effective_deletion_date = $1, deletion_status = $2
+                WHERE employee_id = $3
+                `,
                 [deletion_date, status, id]
             );
 
-            await client.query('COMMIT');
+            await client.query("COMMIT");
 
-            scheduleEmployeeDeletion(pool, { ...res.rows[0], effective_deletion_date: deletion_date, status });
+            scheduleEmployeeDeletion(pool, {
+                ...employee,
+                effective_deletion_date: deletion_date,
+                status,
+            });
 
-            reply.send({ message: `Employee ${id} scheduled for deletion on ${deletion_date}` });
+            reply.send({
+                message: `Employee ${id} scheduled for deletion on ${deletion_date}`,
+            });
         } catch (err) {
-            await client.query('ROLLBACK');
-            console.error(err);
+            await client.query("ROLLBACK");
+            console.error("❌ Delete employee failed:", err.message);
             reply.status(500).send({ error: "Failed to schedule employee deletion" });
         } finally {
             client.release();

@@ -1,7 +1,7 @@
-// utils/employeeDeletionScheduler.js
 import schedule from 'node-schedule';
 import { DateTime } from 'luxon';
-import { syncRow, deleteRow } from './syncToSupabase.js'; // your utils
+import { syncRow, deleteRow } from './syncToSupabase.js';
+import { sendDeactivationScheduledEmail, sendEmployeeDeactivatedEmail } from './sendEmail.js';
 
 const getDeletionTime = (deletionDate) => {
     if (!deletionDate) return null;
@@ -17,25 +17,19 @@ const getDeletionTime = (deletionDate) => {
     return dt.set({ hour: 10, minute: 0, second: 0, millisecond: 0 });
 };
 
-/**
- * Delete employee: archive locally, delete locally, remove from Supabase
- */
 export const deleteEmployeeNow = async (pool, employee) => {
+    if (['Employed', 'Probationary'].includes(employee.status)) return;
+
     const deletionDate = employee.effective_deletion_date || employee.end_of_contract;
     const deletionTime = getDeletionTime(deletionDate);
-    if (!deletionTime) {
-        console.log(`❌ Invalid deletion date for employee ${employee.employee_id}. Skipping.`);
-        return;
-    }
+    if (!deletionTime) return;
 
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
         const statusToArchive = employee.effective_deletion_date ? employee.status : "End of Contract";
-
-        // 0️⃣ Ensure full-time resigned/terminated employees have an end_of_contract
-        const { rowCount } = await client.query(`
+          const { rowCount } = await client.query(`
             UPDATE employee_contracts
             SET end_of_contract = NOW()
             WHERE employee_id = $1
@@ -44,11 +38,11 @@ export const deleteEmployeeNow = async (pool, employee) => {
         `, [employee.employee_id]);
         console.log(`✅ Updated ${rowCount} full-time contracts with end_of_contract = NOW() for employee ${employee.employee_id}`);
 
-        // --- 1️⃣ Archive employee ---
+        // --- Archive employees ---
         const { rows: archivedEmployees } = await client.query(`
             INSERT INTO employees_archive
             (employee_id, fullname, nickname, email, position, employment_type, status, gender, contact,
-             birthday, marital_status, address, sss_number, pagibig, philhealth, current_status)
+            birthday, marital_status, address, sss_number, pagibig, philhealth, current_status)
             SELECT employee_id, fullname, nickname, email, position, employment_type, $2, gender, contact,
                    birthday, marital_status, address, sss_number, pagibig, philhealth, $2
             FROM employees
@@ -56,10 +50,12 @@ export const deleteEmployeeNow = async (pool, employee) => {
             ON CONFLICT (employee_id) DO NOTHING
             RETURNING *
         `, [employee.employee_id, statusToArchive]);
+        if (archivedEmployees.length > 0) {
+            try { await syncRow('employees_archive', archivedEmployees[0], 'employee_id'); }
+            catch (err) { console.error(`Supabase sync failed for employees_archive ${employee.employee_id}:`, err); }
+        }
 
-        if (archivedEmployees.length > 0) await syncRow('employees_archive', archivedEmployees[0], 'employee_id');
-
-        // --- 2️⃣ Archive dependents ---
+        // --- Archive dependents ---
         const { rows: archivedDependents } = await client.query(`
             INSERT INTO employee_dependents_archive
             (employee_id, fullname, relationship, address, contact, city, postalcode, gcash_number)
@@ -68,10 +64,12 @@ export const deleteEmployeeNow = async (pool, employee) => {
             WHERE employee_id = $1
             RETURNING *
         `, [employee.employee_id]);
+        for (const dep of archivedDependents) {
+            try { await syncRow('employee_dependents_archive', dep, 'id'); }
+            catch (err) { console.error(`Supabase sync failed for employee_dependents_archive ${dep.id}:`, err); }
+        }
 
-        for (const dep of archivedDependents) await syncRow('employee_dependents_archive', dep);
-
-        // --- 3️⃣ Archive documents ---
+        // --- Archive documents ---
         const { rows: archivedDocs } = await client.query(`
             INSERT INTO employee_documents_archive
             (document_id, employee_id, sss_id, resume_cv, pagibig, philhealth, barangay_clearance)
@@ -80,10 +78,12 @@ export const deleteEmployeeNow = async (pool, employee) => {
             WHERE employee_id = $1
             RETURNING *
         `, [employee.employee_id]);
+        for (const doc of archivedDocs) {
+            try { await syncRow('employee_documents_archive', doc, 'document_id'); }
+            catch (err) { console.error(`Supabase sync failed for employee_documents_archive ${doc.document_id}:`, err); }
+        }
 
-        for (const doc of archivedDocs) await syncRow('employee_documents_archive', doc, 'document_id');
-
-        // --- 4️⃣ Archive contracts ---
+        // --- Archive contracts ---
         const { rows: contracts } = await client.query('SELECT * FROM employee_contracts WHERE employee_id = $1', [employee.employee_id]);
         if (contracts.length > 0) {
             const { rows: archivedContracts } = await client.query(`
@@ -94,27 +94,61 @@ export const deleteEmployeeNow = async (pool, employee) => {
                 WHERE employee_id = $1
                 RETURNING *
             `, [employee.employee_id]);
-            for (const c of archivedContracts) await syncRow('employee_contracts_archive', c, 'contract_id');
+            for (const c of archivedContracts) {
+                try { await syncRow('employee_contracts_archive', c, 'contract_id'); }
+                catch (err) { console.error(`Supabase sync failed for employee_contracts_archive ${c.contract_id}:`, err); }
+            }
         }
 
-        // --- 5️⃣ Archive employee account ---
+        // --- Archive users ---
         const { rows: archivedAccounts } = await client.query(`
-            INSERT INTO employee_account_archive
-            (account_id, employee_id, email, password, must_change_password)
-            SELECT account_id, employee_id, email, password, must_change_password
-            FROM employee_account
+            INSERT INTO users_archive
+            (account_id, employee_id, fullname, role, email, password, must_change_password)
+            SELECT account_id, employee_id, fullname, role, email, password, must_change_password
+            FROM users
             WHERE employee_id = $1
             RETURNING *
         `, [employee.employee_id]);
-        for (const acc of archivedAccounts) await syncRow('employee_account_archive', acc, 'account_id');
+        for (const acc of archivedAccounts) {
+            try { await syncRow('users_archive', acc, 'account_id'); }
+            catch (err) { console.error(`Supabase sync failed for users_archive ${acc.account_id}:`, err); }
+        }
 
-        // --- 6️⃣ Delete from main tables locally ---
+        // --- Archive attendance ---
+        const { rows: archivedAttendance } = await client.query(`
+            INSERT INTO employee_attendance_archive
+            (attendance_id, employee_id, attend_date, clock_in, clock_out, total_hours, status)
+            SELECT attendance_id, employee_id, attend_date, clock_in, clock_out, total_hours, status
+            FROM employee_attendance
+            WHERE employee_id = $1
+            RETURNING *
+        `, [employee.employee_id]);
+        for (const att of archivedAttendance) {
+            try { await syncRow('employee_attendance_archive', att, 'attendance_id'); }
+            catch (err) { console.error(`Supabase sync failed for employee_attendance_archive ${att.attendance_id}:`, err); }
+        }
+
+        // --- Archive incident reports ---
+        const { rows: archivedIncidents } = await client.query(`
+            INSERT INTO incident_reports_archive
+            (incident_id, employee_id, incident_type, incident_date, witness, reported_by, description, status)
+            SELECT incident_id, employee_id, incident_type, incident_date, witness, reported_by, description, status
+            FROM incident_reports
+            WHERE employee_id = $1
+            RETURNING *
+        `, [employee.employee_id]);
+        for (const ir of archivedIncidents) {
+            try { await syncRow('incident_reports_archive', ir, 'incident_id'); }
+            catch (err) { console.error(`Supabase sync failed for incident_reports_archive ${ir.incident_id}:`, err); }
+        }
+
+        // --- Delete main tables locally ---
         const tablesToDelete = [
             'employee_documents',
             'employee_dependents',
             'employee_work_logs',
             'incident_reports',
-            'employee_account',
+            'users',
             'employee_attendance',
             'employee_contracts',
             'employees'
@@ -122,52 +156,63 @@ export const deleteEmployeeNow = async (pool, employee) => {
         for (const t of tablesToDelete) await client.query(`DELETE FROM ${t} WHERE employee_id = $1`, [employee.employee_id]);
 
         await client.query('COMMIT');
-        console.log(`✅ Archived and deleted employee locally: ${employee.employee_id}`);
 
-        // --- 7️⃣ Delete from Supabase ---
-        await deleteRow('employees', 'employee_id', employee.employee_id);
-        await deleteRow('employee_dependents', 'employee_id', employee.employee_id);
-        await deleteRow('employee_documents', 'employee_id', employee.employee_id);
-        await deleteRow('employee_contracts', 'employee_id', employee.employee_id);
-        await deleteRow('employee_account', 'employee_id', employee.employee_id);
+        console.log(`✅ Employee ${employee.employee_id} archived and deleted successfully.`);
 
-        console.log(`✅ Deleted employee from Supabase: ${employee.employee_id}`);
+        if (employee.email) {
+            try {
+                await sendEmployeeDeactivatedEmail(employee.email, employee.fullname);
+            } catch (err) {
+                console.error(`❌ Failed to send deactivation email to ${employee.email}:`, err);
+            }
+        }
+        // --- Delete from Supabase ---
+        const supabaseTables = [
+            'employees',
+            'employee_dependents',
+            'employee_documents',
+            'employee_contracts',
+            'users',
+            'employee_attendance',
+            'incident_reports'
+        ];
+        for (const t of supabaseTables) {
+            try { await deleteRow(t, 'employee_id', employee.employee_id); }
+            catch (err) { console.error(`Supabase delete failed for table ${t}, employee ${employee.employee_id}:`, err); }
+        }
 
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('❌ Failed to delete employee:', employee.employee_id, err);
+        console.error('Failed to delete employee locally:', employee.employee_id, err);
     } finally {
         client.release();
     }
 };
 
-/**
- * Schedule deletion for a single employee
- */
 export const scheduleEmployeeDeletion = async (pool, employee) => {
+    if (['Employed', 'Probationary'].includes(employee.status)) return;
+
     const deletionDate = employee.effective_deletion_date || employee.end_of_contract;
     const deletionTime = getDeletionTime(deletionDate);
-    if (!deletionTime) {
-        console.error(`❌ Invalid deletion date for employee ${employee.employee_id}:`, deletionDate);
-        return;
-    }
+    if (!deletionTime) return;
 
     const jsDate = deletionTime.toJSDate();
-
     if (deletionTime <= DateTime.now().setZone('Asia/Manila')) {
-        console.log(`⏰ Deletion time passed. Deleting employee ${employee.employee_id} now.`);
         await deleteEmployeeNow(pool, employee);
     } else {
-        console.log(`⏰ Scheduled deletion for employee ${employee.employee_id} at: ${deletionTime.toFormat('MMMM dd, yyyy HH:mm')}`);
         schedule.scheduleJob(jsDate, async () => {
             await deleteEmployeeNow(pool, employee);
+            if (employee.email) {
+                try {
+                    await sendDeactivationScheduledEmail(employee.email, employee.fullname, jsDate);
+                } catch (err) {
+                    console.error(`❌ Failed to send scheduled deactivation email to ${employee.email}:`, err);
+                }
+            }
         });
     }
 };
 
-/**
- * Start recurring timer to check employees due for deletion
- */
 export const startEmployeeDeletionTimer = (pool) => {
     schedule.scheduleJob('*/1 * * * *', async () => {
         const client = await pool.connect();
@@ -180,39 +225,20 @@ export const startEmployeeDeletionTimer = (pool) => {
                     FROM employee_contracts
                     ORDER BY employee_id, updated_at DESC
                 ) c ON e.employee_id = c.employee_id
-                WHERE e.effective_deletion_date <= CURRENT_DATE
-                   OR c.end_of_contract <= CURRENT_DATE
+                WHERE ( (e.effective_deletion_date IS NOT NULL AND e.effective_deletion_date <= CURRENT_DATE)
+                    OR (c.end_of_contract IS NOT NULL AND c.end_of_contract <= CURRENT_DATE) )
+                  AND e.status NOT IN ('Employed', 'Probationary')
             `);
             for (const emp of employees) await deleteEmployeeNow(pool, emp);
-        } catch (err) {
-            console.error('❌ Failed to check scheduled deletions:', err);
         } finally {
             client.release();
         }
     });
 };
 
-/**
- * Initialize deletion schedules on server startup
- */
 export const initEmployeeDeletionSchedules = async (pool) => {
     const client = await pool.connect();
     try {
-        // Delete past-due employees immediately
-        const { rows: pastEmployees } = await client.query(`
-            SELECT e.employee_id, e.status, e.effective_deletion_date, c.end_of_contract
-            FROM employees e
-            LEFT JOIN (
-                SELECT DISTINCT ON (employee_id) employee_id, end_of_contract
-                FROM employee_contracts
-                ORDER BY employee_id, updated_at DESC
-            ) c ON e.employee_id = c.employee_id
-            WHERE e.effective_deletion_date <= CURRENT_DATE
-               OR c.end_of_contract <= CURRENT_DATE
-        `);
-        for (const emp of pastEmployees) await deleteEmployeeNow(pool, emp);
-
-        // Schedule future deletions
         const { rows: futureEmployees } = await client.query(`
             SELECT e.employee_id, e.status, e.effective_deletion_date, c.end_of_contract
             FROM employees e
@@ -221,12 +247,11 @@ export const initEmployeeDeletionSchedules = async (pool) => {
                 FROM employee_contracts
                 ORDER BY employee_id, updated_at DESC
             ) c ON e.employee_id = c.employee_id
-            WHERE e.effective_deletion_date > CURRENT_DATE
-               OR c.end_of_contract > CURRENT_DATE
+            WHERE (e.effective_deletion_date > CURRENT_DATE OR c.end_of_contract > CURRENT_DATE)
+              AND e.status NOT IN ('Employed', 'Probationary')
         `);
+        
         for (const emp of futureEmployees) scheduleEmployeeDeletion(pool, emp);
-
-        console.log('✅ Employee deletion schedules initialized.');
     } finally {
         client.release();
     }

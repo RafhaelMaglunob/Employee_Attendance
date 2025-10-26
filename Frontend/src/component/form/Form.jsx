@@ -6,6 +6,7 @@ export function Form({
 	title,
 	fields = [],
 	onSubmit,
+	disabled = false,
 	submitText = "Submit",
 	cancelText,
 	onCancel,
@@ -109,7 +110,12 @@ export function Form({
 															placeholder={subField.placeholder || "XXX XXX XXXX"}
 															value={withoutPlus63(formValues[subField.name])}
 															required={subField.required ?? true}
-															onChange={(e) => onFieldChange?.(subField.name, e.target.value)}
+															onChange={(e) => {
+																let v = e.target.value.replace(/\D/g, ""); 
+																v = v.replace(/^0+/, ""); 
+																if (v.length > 10) v = v.slice(0, 10); 
+																onFieldChange?.(subField.name, v);
+															}}
 															className={`${getInputClass(disabled)} pl-14`}
 														/>
 													</div>
@@ -181,7 +187,12 @@ export function Form({
 										placeholder={field.placeholder || "XXX XXX XXXX"}
 										value={withoutPlus63(formValues[field.name])}
 										required={field.required ?? true}
-										onChange={(e) => onFieldChange?.(field.name, e.target.value)}
+										onChange={(e) => {
+											let v = e.target.value.replace(/\D/g, ""); 
+											v = v.replace(/^0+/, ""); 
+											if (v.length > 10) v = v.slice(0, 10); 
+											onFieldChange?.(field.name, v);
+										}}	
 										className={`${getInputClass(disabled)} pl-14`}
 									/>
 								</div>
@@ -229,6 +240,7 @@ export function Form({
 					{submitText && (
 						<Button
 							type="submit"
+							disabled={disabled}
 							className="px-4 py-1 border border-black rounded-lg bg-black text-white hover:bg-black/60"
 						>
 							{submitText}
@@ -238,4 +250,120 @@ export function Form({
 			</form>
 		</div>
 	);
+}
+const defaultClasses = {
+  base: "w-full px-3 py-4 border rounded-md",
+  textarea: "h-32 text-xl", // taller for textarea
+  select: "w-full px-3 py-4 border rounded-md bg-white",
+  buttonGroupWrapper: "w-full h-full border rounded-md flex items-center",
+  buttonGroupButton: "flex-1 px-3 py-2",
+};
+
+export default function DynamicForm({ fields, formValues, onFieldChange, onSubmit }) {
+  const handleChange = (name, value) => {
+    onFieldChange?.(name, value);
+  };
+
+  return (
+    <form
+      className="flex flex-col space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit?.(formValues);
+      }}
+    >
+      {/* Grid wrapper */}
+      <div className="grid grid-cols-2 gap-3">
+        {fields.map((field) => {
+          const value = formValues[field.name] ?? "";
+
+          // Button group
+          if (field.type === "buttonGroup") {
+            return (
+              <div key={field.name} className="flex flex-col space-y-2 h-full">
+                <label>{field.label}</label>
+                <div className={defaultClasses.buttonGroupWrapper}>
+                  <div className="flex space-x-2 w-full">
+                    {field.options.map((opt) => (
+                      <Button
+                        key={opt}
+                        type="button"
+                        onClick={() => handleChange(field.name, opt)}
+                        className={`flex-1 ${value === opt ? "bg-black text-white" : defaultClasses.buttonGroupButton}`}
+                      >
+                        {opt}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // Textarea (full width)
+          if (field.type === "textarea") {
+            return (
+              <div key={field.name} className="flex flex-col space-y-2 col-span-2">
+                <label>{field.label}</label>
+                <textarea
+                  value={value}
+                  placeholder={`Please provide details about your ${field.label.toLowerCase()}`}
+                  onChange={(e) => handleChange(field.name, e.target.value)}
+                  className={`${defaultClasses.base} ${defaultClasses.textarea}`}
+                />
+              </div>
+            );
+          }
+
+          // Select
+          if (field.type === "select") {
+            return (
+              <div key={field.name} className="flex flex-col space-y-2 h-full">
+                <label>{field.label}</label>
+                <select
+                  value={value}
+                  onChange={(e) => handleChange(field.name, e.target.value)}
+                  className={defaultClasses.base}
+                >
+                  <option value="" disabled>
+                    Select Option
+                  </option>
+                  {field.options.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            );
+          }
+
+          // Default input (text, date, number)
+          return (
+            <div 
+				key={field.name} 
+				className={`flex flex-col space-y-2 h-full ${field.fullWidth ? "col-span-2" : ""} ${field.className || ""}`}
+			>
+              <label>{field.label}</label>
+              <input
+                type={field.type}
+                value={value}
+                onChange={(e) => handleChange(field.name, e.target.value)}
+                className={defaultClasses.base}
+                maxLength={field.maxLength}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Submit button */}
+      <button
+        type="submit"
+        className="w-full py-4 text-lg font-semibold rounded-md mt-5 bg-black text-white"
+      >
+        Submit
+      </button>
+    </form>
+  );
 }

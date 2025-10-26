@@ -1,0 +1,242 @@
+-- Connect as postgres
+-- psql -U postgres
+
+-- Create database
+-- CREATE DATABASE employee_attendance;
+-- \c employee_attendance
+
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Sequence for employee IDs
+CREATE SEQUENCE employee_id_seq START 1;
+
+-------------------------
+-- Employee Registry
+-------------------------
+CREATE TABLE employee_registry (
+    id SERIAL PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    fullname TEXT UNIQUE NOT NULL,
+    CONSTRAINT unique_email_fullname UNIQUE(email, fullname)
+);
+
+-------------------------
+-- Employees
+-------------------------
+CREATE TABLE IF NOT EXISTS employees (
+    employee_id TEXT PRIMARY KEY DEFAULT 
+        'TCBS' || TO_CHAR(NOW(), 'YYYY') || '-' || LPAD(nextval('employee_id_seq')::text, 4, '0'),
+    fullname VARCHAR(100),
+    nickname VARCHAR(50),
+    email VARCHAR(100),
+    position VARCHAR(100),
+    employment_type VARCHAR(50),
+    gender VARCHAR(10),
+    contact VARCHAR(20),
+    marital_status VARCHAR(20),
+    birthday DATE,
+    address VARCHAR(150),
+    sss_number VARCHAR(20),
+    pagibig VARCHAR(20),
+    philhealth VARCHAR(20),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    current_status VARCHAR(20),
+    status VARCHAR(20),
+    effective_deletion_date DATE,
+    deletion_status VARCHAR(20),
+    age INT,
+    registry_id INT UNIQUE REFERENCES employee_registry(id) ON DELETE CASCADE,
+    is_synced BOOLEAN DEFAULT FALSE,
+    is_restored BOOLEAN DEFAULT FALSE,
+    CONSTRAINT unique_email UNIQUE(email),
+    CONSTRAINT unique_fullname UNIQUE(fullname)
+);
+
+-------------------------
+-- Employees Archive
+-------------------------
+CREATE TABLE IF NOT EXISTS employees_archive (
+    employee_id TEXT PRIMARY KEY,
+    fullname VARCHAR(100),
+    nickname VARCHAR(50),
+    email VARCHAR(100),
+    position VARCHAR(100),
+    employment_type VARCHAR(50),
+    gender VARCHAR(10),
+    contact VARCHAR(20),
+    marital_status VARCHAR(20),
+    birthday DATE,
+    address VARCHAR(150),
+    sss_number VARCHAR(20),
+    pagibig VARCHAR(20),
+    philhealth VARCHAR(20),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    current_status VARCHAR(20),
+    status VARCHAR(20),
+    age INT,
+    registry_id INT UNIQUE REFERENCES employee_registry(id) ON DELETE CASCADE,
+    is_restored BOOLEAN DEFAULT FALSE,
+    CONSTRAINT unique_employee_archive_row UNIQUE(employee_id, fullname, email)
+);
+
+-------------------------
+-- Employee Contracts
+-------------------------
+CREATE TABLE IF NOT EXISTS employee_contracts (
+    contract_id SERIAL PRIMARY KEY,
+    employee_id TEXT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+    start_of_contract TIMESTAMP,
+    end_of_contract TIMESTAMP,
+    contract_type TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS employee_contracts_archive (
+    contract_id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees(employee_id) ON DELETE CASCADE,
+    start_of_contract DATE,
+    end_of_contract DATE,
+    contract_type VARCHAR(50),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-------------------------
+-- Employee Documents
+-------------------------
+CREATE TABLE IF NOT EXISTS employee_documents (
+    document_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id TEXT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+    sss_id VARCHAR(255),
+    resume_cv VARCHAR(255),
+    pagibig VARCHAR(255),
+    philhealth VARCHAR(255),
+    barangay_clearance VARCHAR(255),
+    status VARCHAR(20) DEFAULT 'Incomplete',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS employee_documents_archive (
+    document_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id TEXT NOT NULL REFERENCES employees_archive(employee_id) ON DELETE CASCADE,
+    sss_id VARCHAR(255),
+    resume_cv VARCHAR(255),
+    pagibig VARCHAR(255),
+    philhealth VARCHAR(255),
+    barangay_clearance VARCHAR(255),
+    status VARCHAR(20) DEFAULT 'Incomplete',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-------------------------
+-- Employee Dependents
+-------------------------
+CREATE TABLE IF NOT EXISTS employee_dependents (
+    id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees(employee_id) ON DELETE CASCADE,
+    fullname VARCHAR(100),
+    relationship VARCHAR(50),
+    address VARCHAR(150),
+    contact VARCHAR(20),
+    city VARCHAR(50),
+    postalcode VARCHAR(10),
+    gcash_number VARCHAR(20),
+    CONSTRAINT employee_dependents_employee_id_unique UNIQUE(employee_id)
+);
+
+CREATE TABLE IF NOT EXISTS employee_dependents_archive (
+    id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees_archive(employee_id) ON DELETE CASCADE,
+    fullname VARCHAR(100),
+    relationship VARCHAR(50),
+    address VARCHAR(150),
+    contact VARCHAR(20),
+    city VARCHAR(50),
+    postalcode VARCHAR(10),
+    gcash_number VARCHAR(20)
+);
+
+-------------------------
+-- Audit & Logs
+-------------------------
+CREATE TABLE IF NOT EXISTS audit_logs (
+    log_id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees(employee_id) ON DELETE CASCADE,
+    action VARCHAR(255) NOT NULL,
+    action_time TIMESTAMP DEFAULT NOW(),
+    remarks TEXT
+);
+
+CREATE TABLE IF NOT EXISTS employee_work_logs (
+    log_id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees(employee_id),
+    work_date DATE NOT NULL,
+    hours_worked DECIMAL(5,2) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS incident_reports (
+    incident_id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees(employee_id),
+    incident_type VARCHAR(100),
+    incident_date DATE NOT NULL,
+    witness VARCHAR(100),
+    reported_by VARCHAR(100),
+    description VARCHAR(100),
+    status VARCHAR(50)
+);
+
+-------------------------
+-- Users
+-------------------------
+CREATE TABLE users (
+    account_id SERIAL PRIMARY KEY,
+    employee_id TEXT NULL REFERENCES employees(employee_id) ON DELETE SET NULL,
+    fullname VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    role VARCHAR(50) NOT NULL,
+    must_change_password BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_employee_user UNIQUE(employee_id)
+);
+
+CREATE TABLE users_archive (
+    account_id SERIAL PRIMARY KEY,
+    employee_id TEXT NULL,
+    fullname VARCHAR(100) NOT NULL,
+    email VARCHAR(100),
+    password TEXT,
+    role VARCHAR(50) NOT NULL,
+    must_change_password BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+-------------------------
+-- Attendance & Schedule
+-------------------------
+CREATE TABLE IF NOT EXISTS employee_attendance (
+    attendance_id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees(employee_id),
+    attend_date DATE NOT NULL,
+    clock_in TIME NOT NULL,
+    clock_out TIME NOT NULL,
+    total_hours DECIMAL(5,2) NOT NULL,
+    status VARCHAR(100)
+);
+
+CREATE TABLE IF NOT EXISTS employee_schedule (
+    schedule_id SERIAL PRIMARY KEY,
+    employee_id TEXT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+    work_date DATE NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    task VARCHAR(255),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);

@@ -13,6 +13,8 @@ Frontend Installation
     npm install html2canvas
     npm install docx file-saver
     npm install js-cookie
+    npm install jspdf jspdf-autotable
+
 
 
 

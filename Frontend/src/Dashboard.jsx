@@ -30,7 +30,7 @@ function Dashboard() {
                         title="Attendance Summary"
                         variant="admin"
                         radius="none"
-                        className="flex-1 shadow-[8px_8px_0_#5E451D]"
+                        className="flex-1"
                     >
                         <div className="flex justify-around items-center flex-1 mt-4">
                             <div className="flex flex-col items-center">
@@ -59,7 +59,7 @@ function Dashboard() {
                         radius="none"
                         hasButton
                         footer="View All Requests"
-                        className="flex-1 bg-yellow-400 shadow-[8px_8px_0_#5E451D]"
+                        className="flex-1"
                     >
                         <div className="flex flex-col gap-3 mt-1">
                             <div className="flex items-center gap-4">
@@ -85,7 +85,7 @@ function Dashboard() {
                         radius="none"
                         hasButton
                         footer="View all Schedules"
-                        className="flex-1 bg-yellow-400 shadow-[8px_8px_0_#5E451D]"
+                        className="flex-1"
                     >
                         <div className="flex flex-col flex-1 mt-1 gap-3">
                             <div className="flex justify-between items-center border-b border-black">
@@ -108,7 +108,7 @@ function Dashboard() {
                     title="Recent Activities"
                     variant="admin"
                     radius="none"
-                    className="w-full bg-yellow-400 shadow-[8px_8px_0_#5E451D]"
+                    className="w-full"
                 >
                     <Table columns={columns} data={data} className="mt-4" />
                 </Card>

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useFetchData } from "../hooks/useFetchData";
 import { Table } from "../data/table";
 
-export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateData, api }) {
+export default function RetrieveEmployeeModal({ isOpen, onClose, employeeId, updateData, api }) {
 	const [employee, setEmployee] = useState(null);
 	const [formValues, setFormValues] = useState({});
 	const [error, setError] = useState("");
@@ -20,14 +20,6 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
 		`http://localhost:3001/api/archive/contract/${employeeId}`,
 		transformContract
 	);
-
-	// Log empContract whenever it updates
-	// useEffect(() => {
-	// 	if (empContract) {
-	// 		console.log("Fetched employee contracts:", empContract);
-	// 	}
-	// }, [empContract]);
-
 
 	// Fetch employee data
 	useEffect(() => {
@@ -138,31 +130,17 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
 		{ key: "end_of_contract", title: "End of Contract *" }
 	];
 
-	const handleRetrieve = async () => {
-		if (isSubmitting) return;
-
-		setIsSubmitting(true);
-		setError("");
-
-		try {
-			const res = await fetch(`http://localhost:3001/api/${api}/${employeeId}`, {
-				method: "PATCH",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ status: "Employed" })
-			});
-
-			if (!res.ok) throw new Error("Retrieve failed");
-
-			const updatedEmployee = await res.json();
-			updateData(prev => prev.map(emp => emp.employee_id === employeeId ? updatedEmployee : emp));
-			onClose();
-		} catch (err) {
-			console.error("Failed to retrieve employee:", err);
-			setError("Failed to retrieve employee. Check console for details.");
-		} finally {
-			setIsSubmitting(false);
-		}
+	const handleRetrieve = () => {
+		// Instead of PATCHing, just trigger the RenewContractModal
+		onClose(); // close the modal
+		window.dispatchEvent(
+			new CustomEvent("openRenewContractModal", {
+				detail: { employeeId },
+			})
+		);
 	};
+
+
 
 	const handleClose = () => {
 		setError("");
@@ -175,7 +153,8 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
 				fields={fields}
 				formValues={formValues}
 				onSubmit={handleRetrieve}
-				submitText={"Retrieve"}
+				submitText={isSubmitting ? "Retrieving..." : "Retrieve"}
+				disabled={isSubmitting}
 				cancelText={readOnly ? "Close" : "Cancel"}
 				contracts={<Table columns={contractFields} data={empContract || []} />}
 				errorText={Array.isArray(error) ? error : error ? error.split('.').map(s => s.trim()).filter(Boolean) : []}

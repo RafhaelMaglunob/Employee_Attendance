@@ -3,7 +3,7 @@
     import { Card } from './component/ui/card'
     import { Table } from './component/data/table'
     import { useFetchData } from './component/hooks/useFetchData'
-    import { exportTableToWord } from './component/utils/exportableWord'
+    import { exportTableToPdf } from './component/utils/exportablePdf'
     import ViewHourTrackerModal from './component/modals/viewHourTrackerModal'
 
     function Salary() {
@@ -95,7 +95,7 @@
                     <h1 className="font-bold text-2xl">Employee Hours Tracker</h1>
                     <div className="flex space-x-3">
                         <Button 
-                            onClick={() => exportTableToWord(columns, filteredData, `audit_logs_${new Date().toISOString()}.docx`)}
+                            onClick={() => exportTableToPdf(columns, filteredData, `audit_logs_${new Date().toISOString()}.docx`)}
                             className="bg-black text-white px-3 py-2 rounded-xl flex items-center hover:bg-black/70"
                         >
                             <img src="../img/Export_Icon.png" alt="Export" className="w-5 h-5 mr-2 invert" />

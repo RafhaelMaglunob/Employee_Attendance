@@ -1,16 +1,15 @@
 // component/layout/AdminLayout.jsx
 import React, { useState, useEffect } from "react";
-import { Outlet, Link, useNavigate } from "react-router-dom";
+import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
 import { Sidebar } from "./Container.jsx";
 import { NavBar } from "./NavBar.jsx";
-import Background from "../ui/Background.jsx";
 import Headers from "../ui/header.jsx";
 import { Button } from "../ui/button.jsx";
 import Cookies from "js-cookie";
 
 const sidebar = [
   {name: "Dashboard", src: "../img/Dashboard_Icon.png", alt:"Dashboard Icon", path: "dashboard"},
-  {name: "Employees", src: "../img/Employees_Icon.png", alt:"Employees Icon", path: "employee"},
+  {name: "Employees", src: "../img/Employees_Icon.png", alt:"Employees Icon", path: "employees"},
   {name: "Auditing", src: "../img/Auditing_Icon.png", alt:"Auditing Icon", path: "audit"},
   {name: "Salary", src: "../img/Salary_Icon.png", alt:"Salary Icon", path: "salary"},
   {name: "Incidents", src: "../img/Incidents_Icon.png", alt:"Incidents Icon", path: "incident"},
@@ -23,13 +22,16 @@ const sidebar = [
 
 export default function AdminLayout() {
   const userRole = localStorage.getItem("userRole")?.toLowerCase();
+  const userEmail = localStorage.getItem("userEmail")?.toLowerCase();
   const navigate = useNavigate();
-  const savedPath = localStorage.getItem("buttonPath")?.toLowerCase();
   
-  const [path, setPath] = useState(savedPath || "dashboard");
+  const location = useLocation();
+  const currentPath = location.pathname.split("/")[1] || "dashboard";
+  const [path, setPath] = useState(currentPath);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const Admin_buttonPath = ["Dashboard", "Employees", "Auditing", "Salary", "Incidents", "Reports", "Approvals"]
   const HR_buttonPath = ["Dashboard", "Employees", "Auditing", "Salary", "Incidents", "Reports", "Approvals"]
+  const HeadStaff_buttonPath = ["Dashboard","Scheduling", "Attendance"];
 
   const filteredSidebar = sidebar.filter(item => {
     if (userRole === "admin") {
@@ -38,12 +40,16 @@ export default function AdminLayout() {
     if (userRole === "hr") {
       return HR_buttonPath.includes(item.name);
     }
+    if (userRole === "headstaff") {
+      return HeadStaff_buttonPath.includes(item.name);
+    }
     return true;
   });
 
   useEffect(() => {
-    localStorage.setItem("buttonPath", path);
-  }, [path]);
+    setPath(currentPath);
+    localStorage.setItem("buttonPath", currentPath);
+  }, [currentPath]);
 
   const handleLogout = async () => {
     Cookies.remove("auth_token");
@@ -58,7 +64,6 @@ export default function AdminLayout() {
 
   return (
     <>
-      <Background className="fixed inset-0 -z-10 pointer-events-none" />
       <div className="flex overflow-x-hidden w-full relative">
         <Sidebar
           role={userRole}
@@ -100,7 +105,7 @@ export default function AdminLayout() {
         <div className="flex-1 flex flex-col w-full">
           <NavBar
             className="flex sticky top-0 z-40 items-center border-b-8 border-b-[#5E451D]"
-            variant={userRole}
+            variant={"default"}
           >
             <button className="flex md:hidden ml-4" onClick={() => setSidebarOpen(!sidebarOpen)}>
               <svg
@@ -122,7 +127,16 @@ export default function AdminLayout() {
               <img src="../img/TheCrunchLogoMnoBG 1.png" className="w-auto object-contain" />
               <div className="flex flex-row items-center space-x-2 relative">
                 <img src="../img/Notification.png" alt="Notification Icon" className="w-5 h-5" />
-                <Headers onLogout={handleLogout}/>
+                <Headers userRole={userRole} userEmail={userEmail} onLogout={handleLogout} addSVG>
+                  <div className="border-2 rounded-[50px]">
+                    <img
+                      src="../img/Profile.png"
+                      alt="Profile Icon"
+                      className="w-7 h-7 rounded-full"
+                    />
+                  </div>
+                  
+                </Headers>
               </div>
             </div>
           </NavBar>

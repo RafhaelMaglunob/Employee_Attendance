@@ -2,17 +2,18 @@ import React from 'react';
 import clsx from 'clsx';
 const variants = {
   hr: {
-    title: "bg-red-600 text-white px-4 py-2 text-sm font-semibold flex items-center gap-2 border-b-1 border-b-[#5E451D]",
-    body: "bg-yellow-400 flex flex-col shadow-[8px_8px_0_#5E451D] font-inter",
+    title: "bg-red-600 text-white px-4 py-2 text-sm font-semibold flex items-center gap-2 border-b border-b-gray-800",
+    body: "bg-[#FFC629] flex flex-col shadow-[8px_8px_0_#111827] font-inter text-black",
   },
   admin: {
-    title: "bg-red-600 text-white px-4 py-2 text-sm font-semibold flex items-center gap-2 border-b-1 border-b-[#5E451D]",
-    body: "bg-yellow-400 flex flex-col shadow-[8px_8px_0_#5E451D] font-inter",
+    title: "bg-red-600 text-white px-4 py-2 text-sm font-semibold flex items-center gap-2",
+    body: "bg-[#FFC629] flex flex-col shadow-[8px_8px_0_#111827] font-inter text-black",
   },
   default: {
-    title: "bg-red-600 text-white px-4 py-2 text-sm font-semibold flex items-center gap-2 border-b-1 border-b-[#5E451D]",
-    body: "bg-yellow-400 flex flex-col shadow-[8px_8px_0_#5E451D] font-inter",
+    title: "bg-red-600 text-white px-4 py-2 text-sm font-semibold flex items-center gap-2 border-b border-b-gray-800",
+    body: "bg-[#FFC629] flex flex-col shadow-[8px_8px_0_#111827] font-inter text-black",
   },
+
 }
 
 const titleSizes = {
@@ -59,7 +60,7 @@ export function Card({
 
 
       {/* Body */}
-      <div className="flex-1 p-4">{children}</div>
+      <div className={`flex-1 p-4`}>{children}</div>
 
       {/* Footer */}
       {hasButton && (

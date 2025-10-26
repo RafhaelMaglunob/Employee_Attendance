@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from "react";
 import { Button } from "../ui/button";
-
 export function Table({ columns, data, className }) {
   return (
     <div className={`overflow-x-auto ${className || ""}`}>
@@ -9,10 +8,10 @@ export function Table({ columns, data, className }) {
           <tr>
             {columns.map((col) => (
               <th
-                key={col.key}
+                key={col.key || col.header} // fallback if key not provided
                 className={`text-left text-xs font-semibold text-gray-600 px-4 py-2 border-b ${col.headerClassName || ""}`}
               >
-                {col.title}
+                {col.title || col.header}
               </th>
             ))}
           </tr>
@@ -22,7 +21,7 @@ export function Table({ columns, data, className }) {
             <tr>
               <td
                 colSpan={columns.length}
-                className="text-center py-4 text-gray-500"
+                className="text-center py-4 text-gray-500 whitespace-nowrap"
               >
                 No data available
               </td>
@@ -30,13 +29,13 @@ export function Table({ columns, data, className }) {
           ) : (
             data.map((row, rowIndex) => (
               <tr
-                key={rowIndex}
-                className={rowIndex % 2 === 0 ? "bg-white" : "bg-gray-50 hover:bg-gray-100"}
+                key={row.id || rowIndex} // use unique id if available
+                className={rowIndex % 2 === 0 ? "bg-white" : "bg-gray-200 hover:bg-gray-200"}
               >
-                {columns.map((col) => (
+                {columns.map((col, colIndex) => (
                   <td
-                    key={col.key}
-                    className="text-sm text-gray-700 px-4 py-2 border-b"
+                    key={col.key || colIndex} // use index as fallback
+                    className="text-sm text-gray-700 px-4 py-2 border-b whitespace-nowrap"
                   >
                     {col.render ? col.render(row) : row[col.key]}
                   </td>
@@ -49,6 +48,7 @@ export function Table({ columns, data, className }) {
     </div>
   );
 }
+
 
 export function PaginatedTable({ columns, data, itemsPerPage = 5, className, readOnly = false }) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -95,7 +95,7 @@ export function PaginatedTable({ columns, data, itemsPerPage = 5, className, rea
             <tr>
               <td
                 colSpan={columns.length}
-                className="text-center py-4 text-gray-500"
+                className="text-center py-4 text-gray-500 whitespace-nowrap"
               >
                 No data available
               </td>
@@ -109,7 +109,7 @@ export function PaginatedTable({ columns, data, itemsPerPage = 5, className, rea
                 {columns.map((col) => (
                   <td
                     key={col.key}
-                    className="text-sm text-gray-700 px-4 py-2 border-b"
+                    className="text-sm text-gray-700 px-4 py-2 border-b whitespace-nowrap"
                   >
                     {col.render ? col.render(row) : row[col.key]}
                   </td>

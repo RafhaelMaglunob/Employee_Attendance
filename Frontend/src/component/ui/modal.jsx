@@ -11,9 +11,9 @@ export function ModalContainer({
     variant,
     children, 
     width = "lg", 
-    className = "" 
+    className = "",
+    disableOverlayClose = false, // ✅ new prop
 }) {
-  // Map width prop to Tailwind classes
     const widthClasses = {
         sm: "max-w-sm",
         md: "max-w-md",
@@ -24,9 +24,24 @@ export function ModalContainer({
         full: "max-w-full",
     };
 
+    const handleOverlayClick = (e) => {
+        // ✅ only close if overlay (not modal content) is clicked
+        if (!disableOverlayClose && e.target === e.currentTarget && onClose) {
+            onClose();
+        }
+    };
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className={clsx("max-h-[80vh] overflow-y-auto w-full p-4", widthClasses[width])}>
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={handleOverlayClick}
+        >
+            <div
+                className={clsx(
+                    "max-h-[80vh] overflow-y-auto w-full p-4",
+                    widthClasses[width]
+                )}
+            >
                 <Card
                     title={title}
                     titleSize={titleSize}

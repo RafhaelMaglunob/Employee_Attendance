@@ -6,7 +6,7 @@ const baseStyle = {
 };
 const roles = {
     hr: "bg-[#FFC629]",
-    admin: "bg-black text-white"
+    admin: "bg-[#FFC629]"
 }
 
 export function Sidebar({ role, children, className }) {

@@ -3,7 +3,7 @@ import { Button } from './component/ui/button'
 import { Card } from './component/ui/card'
 import { PaginatedTable } from './component/data/table'
 import { useFetchData } from './component/hooks/useFetchData'
-import { exportTableToWord } from './component/utils/exportableWord'
+import { exportTableToPdf } from './component/utils/exportablePdf'
 
 function Reports() {
     const itemsPerPage = 5
@@ -85,7 +85,7 @@ function Reports() {
                     </Button>
                     <Button
                         onClick={() =>
-                            exportTableToWord(
+                            exportTableToPdf(
                                 incidentColumns,
                                 filteredIncidentData,
                                 `reports_${new Date().toISOString()}.docx`

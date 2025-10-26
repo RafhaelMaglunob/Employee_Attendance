@@ -6,14 +6,14 @@ import { Filter } from './component/ui/filter'
 import { PaginatedTable } from './component/data/table'
 import { useFetchData } from './component/hooks/useFetchData'
 import { applySearchAndFilter } from './component/utils/applySearchFilter';
-import { exportTableToWord } from './component/utils/exportableWord'
+import { exportTableToPdf } from './component/utils/exportablePdf'
 
 function Auditing() {
+    const itemsPerPage = 5;
     const savedSort = localStorage.getItem("auditSort") || "Filter";
     
     const [selectedDate, setSelectedDate] = useState("");
     const [selectedSort, setSelectedSort] = useState(savedSort);
-    const itemsPerPage = 5;
     const [query, setQuery] = useState("")
 
     useEffect(() => { localStorage.setItem("auditSort", selectedSort) }, [selectedSort]);
@@ -88,7 +88,7 @@ function Auditing() {
                 <div className="flex items-center px-2 py-1 bg-white border rounded-xl cursor-pointer hover:bg-gray-100">
                     <img src="../img/Export_Icon.png" alt="Export Icon" className="w-5 h-5 mr-2" />
                     <Button
-                        onClick={() => exportTableToWord(columns, filteredData, `audit_logs_${new Date().toISOString()}.docx`)}
+                        onClick={() => exportTableToPdf(columns, filteredData, `audit_logs_${new Date().toISOString()}.docx`)}
                         className="font-bold text-sm px-2 py-1"
                     >
                         Export Logs

@@ -19,7 +19,7 @@ export function attendanceController(pool) {
             return { success: true, data: result.rows };
         } catch (err) {
             console.error("Database Error:", err.message);
-            reply.status(500).send({ error: "Failed to fetch attendance", details: err.message });
+            reply.status(500).send({ error: "Failed to fetch attendance.", details: err.message });
         }
     };
 

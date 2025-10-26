@@ -37,3 +37,15 @@ export async function deleteRow(table, primaryKey, value) {
         console.error(`Supabase delete failed [${table}]:`, err.message);
     }
 }
+
+export async function restoreRow(table, primaryKey = 'id', value) {
+    try {
+        const { error } = await supabase
+            .from(table)
+            .delete()
+            .eq(primaryKey, value);
+        if (error) console.error(`Supabase restore error [${table}]:`, error.message);
+    } catch (err) {
+        console.error(`Supabase restore failed [${table}]:`, err.message);
+    }
+}

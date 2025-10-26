@@ -1,7 +1,8 @@
-import { HashRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "./component/utils/protectedRoute.jsx";
-import { ProtectedEmployeeRoute } from "./component/utils/protectedEmployeeRoute.jsx"
+import { ProtectedEmployeeRoute } from "./component/utils/protectedEmployeeRoute.jsx";
 
+import { RedirectToBase } from "./component/utils/RedirectToBase.jsx";
 import Login from "./Login.jsx";
 import AdminLayout from "./component/layout/AdminLayout.jsx";
 import EmployeeLayout from "./component/layout/EmployeeLayout.jsx";
@@ -10,22 +11,24 @@ import Employees from "./Employees.jsx";
 import Auditing from "./Auditing.jsx";
 import Salary from "./Salary.jsx";
 import Incident from "./Incident.jsx";
-import Reports from "./Reports.jsx";
 import Scheduling from "./Scheduling.jsx";
 import Attendance from "./Attendance.jsx";
 import Approval from "./Approval.jsx";
 
-
-import EmployeeLogin from "./EmployeeLogin.jsx"
+import EmployeeLogin from "./EmployeeLogin.jsx";
 import EmployeeDashboard from "./EmployeeDashboard.jsx";
+import EmployeeReport from "./EmployeeReport.jsx";
+import EmployeeNotification from "./EmployeeNotification.jsx";
+import EmployeeSchedule from "./EmployeeSchedule.jsx";
 
 function App() {
   return (
     <Router>
       <Routes>
+        {/* Admin login */}
         <Route path="/login" element={<Login />} />
 
-        {/* Everything under / is protected */}
+        {/* Admin protected routes */}
         <Route
           path="/"
           element={
@@ -36,24 +39,35 @@ function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="dashboard" element={<Dashboard />} />
-          <Route path="employee" element={<Employees />} />
+          <Route path="employees" element={<Employees />} />
           <Route path="audit" element={<Auditing />} />
           <Route path="salary" element={<Salary />} />
-          {/* <Route path="report" element={<Reports />} /> */}
           <Route path="incident" element={<Incident />} />
           <Route path="schedule" element={<Scheduling />} />
           <Route path="attendance" element={<Attendance />} />
           <Route path="approval" element={<Approval />} />
         </Route>
 
+        {/* Employee login */}
         <Route path="/employee-login" element={<EmployeeLogin />} />
-        <Route path="/employee" element={
-          <ProtectedEmployeeRoute>
-            <EmployeeLayout />
-          </ProtectedEmployeeRoute>
-        }>
+
+        {/* Employee protected routes */}
+        <Route
+          path="/employee/*"
+          element={
+            <ProtectedEmployeeRoute>
+              <EmployeeLayout />
+            </ProtectedEmployeeRoute>
+          }
+        >
+          <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<EmployeeDashboard />} />
+          <Route path="reports" element={<EmployeeReport />} />
+          <Route path="notifications" element={<EmployeeNotification />} />
+          <Route path="weekly-shift" element={<EmployeeSchedule />} />
         </Route>
+
+        <Route path="*" element={<RedirectToBase />} />
       </Routes>
     </Router>
   );
