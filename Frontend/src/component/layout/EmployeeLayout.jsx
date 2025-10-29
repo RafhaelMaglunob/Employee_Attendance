@@ -4,15 +4,33 @@ import { NavBar } from "./NavBar";
 import { useState, useEffect, useRef } from "react";
 import Headers from "../ui/header";
 import { Sidebar } from "./Container";
+import ChangePasswordModal from "../modals/ChangePasswordModal.jsx";
+
+import ConfirmModal from "../modals/ConfirmModal";
+import MessageModal from "../modals/MessageModal";
+
 
 export default function EmployeeLayout() {
+	const [showChangePassword, setShowChangePassword] = useState(false);
+	const [confirmOpen, setConfirmOpen] = useState(false);
+	const [messageOpen, setMessageOpen] = useState(false);
+	const [messageText, setMessageText] = useState("");
+
+
 	const userRole = localStorage.getItem("employeeRole")?.toLowerCase();
 	const userEmail = localStorage.getItem("employeeEmail")?.toLowerCase();
+	const isFirstLogin = localStorage.getItem("isFirstLogin");
 	const navigate = useNavigate();
 	const location = useLocation();
 	const [showBottomNav, setShowBottomNav] = useState(true);
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const bottomRef = useRef(null);
+
+	useEffect(() => {
+		if(isFirstLogin === "true") {
+			setShowChangePassword(true);
+		}
+	}, [isFirstLogin])
 
 	const [path, setPath] = useState(() => {
 		const saved = localStorage.getItem("employeePath");
@@ -39,14 +57,67 @@ export default function EmployeeLayout() {
 		navigate(path);             
 	};
 
+	const handleChangePasswordSubmit = async ({ oldPassword, newPassword }) => {
+		const token = Cookies.get("employee_token");
+		if (!token) {
+			handleLogout(); 
+			return;
+		}
+
+		setConfirmOpen(true);
+
+		const confirm = await new Promise((resolve) => {
+			const interval = setInterval(() => {
+			if (window.__confirmResult !== undefined) {
+				clearInterval(interval);
+				const result = window.__confirmResult;
+				window.__confirmResult = undefined;
+				resolve(result);
+			}
+			}, 100);
+		});
+
+		if (!confirm) return;
+
+		try {
+			console.log("Token being sent:", token); 
+			const res = await fetch("http://localhost:3001/api/employee/change-password", {
+				method: "PUT",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${token}`,
+				},
+				body: JSON.stringify({ oldPassword, newPassword }),
+			});
+
+			const data = await res.json();
+
+			if (data.success) {
+			setMessageText("✅ Your password has been successfully changed.");
+			setMessageOpen(true);
+			setShowChangePassword(false);
+			localStorage.removeItem("isFirstLogin");
+			} else {
+			setMessageText(data.error || "❌ Failed to change password.");
+			setMessageOpen(true);
+			}
+		} catch (err) {
+			setMessageText("⚠️ Server error. Please try again.");
+			setMessageOpen(true);
+		}
+	};
+
+
 	const handleLogout = () => {
-		Cookies.remove("auth_token");
-		localStorage.removeItem("employee-id");
+		Cookies.remove("employee_token");
+		localStorage.removeItem("employeeId");
 		localStorage.removeItem("employeeButtonPath");
 		localStorage.removeItem("employeeRole");
-		localStorage.removeItem("employeeEmail")
-		window.location.href = "/employee-login";
+		localStorage.removeItem("employeeEmail");
+
+		navigate("/employee-login"); // ✅ React Router navigation
 	};
+
 
 	// Hide bottom bar on scroll
 	useEffect(() => {
@@ -176,7 +247,7 @@ export default function EmployeeLayout() {
 
 				{/* Page Content */}
 				<main className="flex-1 md:ml-20 overflow-auto p-4 pb-20" onClick={() => setShowBottomNav(true)}>
-					<Outlet  context={{ setPath, setCurrentPath }} />
+					<Outlet  context={{ setPath, setCurrentPath, handleLogout }} />
 				</main>
 			</div>
 
@@ -205,6 +276,33 @@ export default function EmployeeLayout() {
 					})}
 				</div>
 			</NavBar>
+			{showChangePassword && (
+				<ChangePasswordModal
+					isOpen={showChangePassword}
+					onClose={() => {
+					setShowChangePassword(false);
+					localStorage.removeItem("isFirstLogin");
+					}}
+					onSubmit={handleChangePasswordSubmit} // ✅ Pass function
+				/>
+			)}
+			{/* Confirm Change Password */}
+			<ConfirmModal
+				isOpen={confirmOpen}
+				title="Confirm Password Change"
+				message="Are you sure you want to change your password?"
+				onConfirm={() => { window.__confirmResult = true; setConfirmOpen(false); }}
+				onCancel={() => { window.__confirmResult = false; setConfirmOpen(false); }}
+			/>
+
+			{/* Result Message */}
+			<MessageModal
+				isOpen={messageOpen}
+				message={messageText}
+				onClose={() => setMessageOpen(false)}
+			/>
+
+
 		</div>
 	);
 }

@@ -5,6 +5,7 @@ const tables = [
   'employee_registry',
   'employee_schedule',
   'employees',
+  'employee_requests',
   'employee_dependents',
   'employee_documents',
   'employee_contracts',
@@ -35,6 +36,8 @@ function getKeyColumn(table) {
     case 'employee_documents':
     case 'employee_documents_archive':
       return 'document_id';
+    case 'employee_requests':
+      return 'request_id';
     case 'users':
     case 'users_archive':
       return 'account_id';

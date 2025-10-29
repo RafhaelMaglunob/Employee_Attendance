@@ -86,7 +86,7 @@ export default function RenewContractModal({ isOpen, onClose, employeeId, update
 			onClose={onClose}
 			disableOverlayClose={false}
 		>
-			<Card radius="none" className="bg-blue-100 shadow-none">
+			<Card radius="none" className="shadow-none">
 				<div className={`flex flex-col w-full relative space-y-4 ${loading ? "opacity-75" : ""}`}>
 					<label className="text-sm">Employment Type</label>
 					<select

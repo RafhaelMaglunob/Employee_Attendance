@@ -22,11 +22,11 @@ function EmployeeLogin() {
         if (!res.ok) {
             setError(data.error || "Login failed");
         } else {
-            Cookies.set("auth_token", data.token || "", { expires: 1 });
-            localStorage.setItem("employee-id", data.data.employee_id);
+            Cookies.set("employee_token", data.token || "", { expires: 1, sameSite: "Lax" });
             localStorage.setItem("employeeEmail", data.data.email);
             localStorage.setItem("employeeRole", data.data.role);
             localStorage.setItem("employeeId", data.data.employee_id);
+            localStorage.setItem("isFirstLogin", data.data.must_change_password);
             navigate("/employee/dashboard", { replace: true });
         }
     };

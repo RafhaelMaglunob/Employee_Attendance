@@ -3,6 +3,8 @@ import { sendEmployeeEmail } from '../utils/sendEmail.js';
 import { scheduleEmployeeDeletion } from '../utils/employeeDeletionScheduler.js';
 import { calculateAge } from '../utils/calculateAge.js';
 import { syncRow, deleteRow } from '../utils/syncToSupabase.js';
+import { getIo } from "../socket.js";
+
 
 export function employeeController(pool) {
 
@@ -500,12 +502,114 @@ export function employeeController(pool) {
         }
     };
 
+    const getAllEmployeeRequest = async (req, reply) => {
+        try {
+            const { rows } = await pool.query(`
+                SELECT 
+                    r.employee_id,
+                    r.request_id,
+                    e.fullname AS employee_name,
+                    r.request_type,
+                    r.type,
+                    r.days,
+                    TO_CHAR(r.start_date, 'MM/DD/YYYY') AS start_date,
+                    TO_CHAR(r.end_date, 'MM/DD/YYYY') AS end_date,
+                    r.date,
+                    r.hours,
+                    r.reason,
+                    r.link,
+                    r.status,
+                    TO_CHAR(r.created_at, 'MM/DD/YYYY') AS created_at
+                FROM employee_requests r
+                JOIN employees e ON r.employee_id = e.employee_id
+                ORDER BY r.created_at DESC    
+            `);
+
+            const mappedRows = rows.map(row => ({
+                employee_id: row.employee_id,
+                request_id: row.request_id,
+                employee_name: row.employee_name,
+                request_type: row.request_type,
+                type: row.type,
+                days: row.days,
+                start_date: row.start_date,
+                end_date: row.end_date,
+                date: row.date,        // used for overtime/off-set
+                hours: row.hours || 0, // used for leave or hours
+                status: row.status,
+                current_date: row.date,  // populate current_date for offset table
+                current_time: row.hours ? `${row.hours} hr(s)` : null, // optional
+                requested_date: row.date, 
+                requested_time: row.hours ? `${row.hours} hr(s)` : null,
+            }));
+
+
+            return reply.send({ success: true, data: mappedRows });
+        } catch (err) {
+            console.error("Error fetching all employee requests:", err);
+            return reply.status(500).send({ success: false, message: "Failed to fetch employee requests" });
+        }
+    };
+
+    const updateEmployeeRequest = async (req, reply) => {
+        const io = req.server.io; // <-- get socket.io instance
+        const { requestId } = req.params;
+        const { status, remarks, days, hours } = req.body;
+        const client = await pool.connect();
+
+        try {
+            await client.query("BEGIN");
+            
+            const empReq = await client.query(`
+                SELECT status, days, hours FROM employee_requests WHERE request_id = $1    
+            `, [requestId]);
+            const empResult = empReq.rows[0];
+
+            const updateRes = await client.query(
+                `UPDATE employee_requests 
+                SET status = $1, remarks = $2, days = $3, hours = $4
+                WHERE request_id = $5
+                RETURNING *`,
+                [status || empResult.status, remarks || null, days || empResult.days, hours || empResult.hours, requestId]
+            );
+
+            if (!updateRes.rows.length) {
+                await client.query("ROLLBACK");
+                return reply.status(404).send({ success: false, message: "Request not found" });
+            }
+
+            const updatedRequest = updateRes.rows[0];
+            await client.query("COMMIT");
+
+            // Emit to all connected clients
+            io.emit("employeeRequestUpdated", {
+                ...updatedRequest,
+                request_type: updatedRequest.request_type.toLowerCase(),
+                status: updatedRequest.status.toLowerCase(),
+            });
+
+            return reply.send({ success: true, data: updatedRequest });
+
+        } catch (err) {
+            await client.query("ROLLBACK");
+            console.error("Error updating employee request:", err.message);
+            return reply.status(500).send({ success: false, message: "Failed to update request" });
+        } finally {
+            client.release();
+        }
+    };
+
+
+
+
     return {
         getAllEmployees,
         addEmployee,
         getSingleEmployee,
         getSingleEmployeeContract,
         updateEmployee,
-        deleteEmployee
+        deleteEmployee,
+        getAllEmployeeRequest,
+        updateEmployeeRequest
     };
 }

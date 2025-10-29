@@ -1,5 +1,5 @@
 // Form.jsx
-import React from "react";
+import React, { useState } from "react";
 import { Button } from "../ui/button";
 
 export function Form({
@@ -251,118 +251,185 @@ export function Form({
 		</div>
 	);
 }
+
 const defaultClasses = {
-  base: "w-full px-3 py-4 border rounded-md",
-  textarea: "h-32 text-xl", // taller for textarea
-  select: "w-full px-3 py-4 border rounded-md bg-white",
+  base: "w-full px-3 py-4 border rounded-md cursor-pointer",
+  textarea: "h-32 text-xl",
+  select: "w-full px-3 py-4 border rounded-md bg-white cursor-pointer",
   buttonGroupWrapper: "w-full h-full border rounded-md flex items-center",
   buttonGroupButton: "flex-1 px-3 py-2",
 };
 
-export default function DynamicForm({ fields, formValues, onFieldChange, onSubmit }) {
+export default function DynamicForm({ fields, formValues, onFieldChange, onSubmit, isSubmitting }) {
+  const [errors, setErrors] = useState({});
+
   const handleChange = (name, value) => {
+    if (isSubmitting) return;
+    const newFormValues = { ...formValues, [name]: value };
     onFieldChange?.(name, value);
+
+    const newErrors = { ...errors };
+
+    fields.forEach(field => {
+      switch (field.type) {
+        case "date":
+          const start = newFormValues.startDate ? new Date(newFormValues.startDate) : null;
+          const end = newFormValues.endDate ? new Date(newFormValues.endDate) : null;
+          const current = newFormValues[field.name] ? new Date(newFormValues[field.name]) : null;
+
+          if (!current) {
+            newErrors[field.name] = `${field.label} is required.`;
+          } else if (field.min && current < new Date(field.min)) {
+            newErrors[field.name] = `${field.label} cannot be before ${field.min}.`;
+          } else if (field.name === "endDate" && start && current <= start) {
+            newErrors[field.name] = "End Date must be after Start Date.";
+          } else if (field.name === "startDate" && end && current >= end) {
+            newErrors[field.name] = "Start Date must be before End Date.";
+          } else {
+            newErrors[field.name] = "";
+          }
+          break;
+
+        case "number":
+          if (field.min && value < field.min) newErrors[field.name] = `${field.label} must be at least ${field.min}.`;
+          else if (field.max && value > field.max) newErrors[field.name] = `${field.label} cannot exceed ${field.max}.`;
+          else newErrors[field.name] = "";
+          break;
+
+        case "textarea":
+        case "text":
+        default:
+          if (field.required && !value) newErrors[field.name] = `${field.label} is required.`;
+          else newErrors[field.name] = "";
+          break;
+      }
+    });
+
+    setErrors(newErrors);
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+
+    let valid = true;
+    const newErrors = {};
+
+    fields.forEach(field => {
+      const value = formValues[field.name];
+
+      switch (field.type) {
+        case "date":
+          const start = formValues.startDate ? new Date(formValues.startDate) : null;
+          const end = formValues.endDate ? new Date(formValues.endDate) : null;
+          const current = value ? new Date(value) : null;
+
+          if (!current) {
+            valid = false;
+            newErrors[field.name] = `${field.label} is required.`;
+          } else if (field.min && current < new Date(field.min)) {
+            valid = false;
+            newErrors[field.name] = `${field.label} cannot be before ${field.min}.`;
+          } else if (field.name === "endDate" && start && current <= start) {
+            valid = false;
+            newErrors[field.name] = "End Date must be after Start Date.";
+          } else if (field.name === "startDate" && end && current >= end) {
+            valid = false;
+            newErrors[field.name] = "Start Date must be before End Date.";
+          }
+          break;
+
+        case "number":
+          if (field.min && value < field.min) {
+            valid = false;
+            newErrors[field.name] = `${field.label} must be at least ${field.min}.`;
+          } else if (field.max && value > field.max) {
+            valid = false;
+            newErrors[field.name] = `${field.label} cannot exceed ${field.max}.`;
+          }
+          break;
+
+        default:
+          if (field.required && !value) {
+            valid = false;
+            newErrors[field.name] = `${field.label} is required.`;
+          }
+          break;
+      }
+    });
+
+    setErrors(newErrors);
+    if (!valid) return;
+
+    onSubmit?.(formValues);
   };
 
   return (
-    <form
-      className="flex flex-col space-y-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSubmit?.(formValues);
-      }}
-    >
-      {/* Grid wrapper */}
+    <form className="flex flex-col space-y-3" onSubmit={handleSubmit}>
       <div className="grid grid-cols-2 gap-3">
-        {fields.map((field) => {
+        {fields.map(field => {
           const value = formValues[field.name] ?? "";
+          const error = errors[field.name];
+          const disabled = field.disabled || isSubmitting;
 
-          // Button group
-          if (field.type === "buttonGroup") {
-            return (
-              <div key={field.name} className="flex flex-col space-y-2 h-full">
-                <label>{field.label}</label>
-                <div className={defaultClasses.buttonGroupWrapper}>
-                  <div className="flex space-x-2 w-full">
-                    {field.options.map((opt) => (
-                      <Button
-                        key={opt}
-                        type="button"
-                        onClick={() => handleChange(field.name, opt)}
-                        className={`flex-1 ${value === opt ? "bg-black text-white" : defaultClasses.buttonGroupButton}`}
-                      >
-                        {opt}
-                      </Button>
-                    ))}
-                  </div>
+          switch (field.type) {
+            case "textarea":
+              return (
+                <div key={field.name} className="flex flex-col space-y-1 col-span-2">
+                  <label>{field.label}</label>
+                  <textarea
+                    value={value}
+                    onChange={e => handleChange(field.name, e.target.value)}
+                    disabled={disabled}
+                    className={`${defaultClasses.base} ${defaultClasses.textarea} ${error ? "border-red-500" : ""} ${disabled ? "bg-gray-100 cursor-not-allowed" : ""}`}
+                  />
+                  {error && <span className="text-red-500 text-sm">{error}</span>}
                 </div>
-              </div>
-            );
-          }
+              );
 
-          // Textarea (full width)
-          if (field.type === "textarea") {
-            return (
-              <div key={field.name} className="flex flex-col space-y-2 col-span-2">
-                <label>{field.label}</label>
-                <textarea
-                  value={value}
-                  placeholder={`Please provide details about your ${field.label.toLowerCase()}`}
-                  onChange={(e) => handleChange(field.name, e.target.value)}
-                  className={`${defaultClasses.base} ${defaultClasses.textarea}`}
-                />
-              </div>
-            );
-          }
+            case "select":
+              return (
+                <div key={field.name} className={`flex flex-col space-y-1 ${field.fullWidth ? "col-span-2" : ""}`}>
+                  <label>{field.label}</label>
+                  <select
+                    value={value}
+                    onChange={e => handleChange(field.name, e.target.value)}
+                    disabled={disabled}
+                    className={`${defaultClasses.select} ${error ? "border-red-500" : ""} ${disabled ? "bg-gray-100 cursor-not-allowed" : ""}`}
+                  >
+                    <option value="" disabled>Select Option</option>
+                    {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </select>
+                  {error && <span className="text-red-500 text-sm">{error}</span>}
+                </div>
+              );
 
-          // Select
-          if (field.type === "select") {
-            return (
-              <div key={field.name} className="flex flex-col space-y-2 h-full">
-                <label>{field.label}</label>
-                <select
-                  value={value}
-                  onChange={(e) => handleChange(field.name, e.target.value)}
-                  className={defaultClasses.base}
-                >
-                  <option value="" disabled>
-                    Select Option
-                  </option>
-                  {field.options.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            );
+            default:
+              return (
+                <div key={field.name} className={`flex flex-col space-y-1 ${field.fullWidth ? "col-span-2" : ""}`}>
+                  <label>{field.label}</label>
+                  <input
+                    type={field.type || "text"}
+                    value={value}
+                    onChange={e => handleChange(field.name, e.target.value)}
+                    disabled={disabled}
+                    min={field.min}
+                    max={field.max}
+                    className={`${defaultClasses.base} ${error ? "border-red-500" : ""} ${disabled ? "bg-gray-100 cursor-not-allowed text-gray-500" : ""}`}
+                  />
+                  {error && <span className="text-red-500 text-sm">{error}</span>}
+                </div>
+              );
           }
-
-          // Default input (text, date, number)
-          return (
-            <div 
-				key={field.name} 
-				className={`flex flex-col space-y-2 h-full ${field.fullWidth ? "col-span-2" : ""} ${field.className || ""}`}
-			>
-              <label>{field.label}</label>
-              <input
-                type={field.type}
-                value={value}
-                onChange={(e) => handleChange(field.name, e.target.value)}
-                className={defaultClasses.base}
-                maxLength={field.maxLength}
-              />
-            </div>
-          );
         })}
       </div>
 
-      {/* Submit button */}
       <button
         type="submit"
-        className="w-full py-4 text-lg font-semibold rounded-md mt-5 bg-black text-white"
+        className={`w-full py-4 text-lg font-semibold rounded-md mt-5 bg-black text-white ${isSubmitting ? "opacity-70 cursor-not-allowed" : ""}`}
+        disabled={isSubmitting}
       >
-        Submit
+        {isSubmitting ? "...Submitting" : "Submit"}
       </button>
     </form>
   );

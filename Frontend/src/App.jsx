@@ -20,6 +20,10 @@ import EmployeeDashboard from "./EmployeeDashboard.jsx";
 import EmployeeReport from "./EmployeeReport.jsx";
 import EmployeeNotification from "./EmployeeNotification.jsx";
 import EmployeeSchedule from "./EmployeeSchedule.jsx";
+import EmployeeDetails from "./EmployeeDetails.jsx";
+import EmployeeDocuments from "./EmployeeDocuments.jsx";
+import EmployeeSetting from "./EmployeeSetting.jsx";
+import EmployeeIncident from "./EmployeeIncident.jsx";
 
 function App() {
   return (
@@ -65,6 +69,10 @@ function App() {
           <Route path="reports" element={<EmployeeReport />} />
           <Route path="notifications" element={<EmployeeNotification />} />
           <Route path="weekly-shift" element={<EmployeeSchedule />} />
+          <Route path="more" element={<EmployeeDetails />} />
+          <Route path="document" element={<EmployeeDocuments />} />
+          <Route path="incident-reports" element={<EmployeeIncident />} />
+          <Route path="setting" element={<EmployeeSetting />} />
         </Route>
 
         <Route path="*" element={<RedirectToBase />} />

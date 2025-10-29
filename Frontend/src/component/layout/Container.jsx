@@ -6,10 +6,11 @@ const baseStyle = {
 };
 const roles = {
     hr: "bg-[#FFC629]",
-    admin: "bg-[#FFC629]"
+    admin: "bg-[#FFC629]",
+    default: "bg-[#FFC629]"
 }
 
-export function Sidebar({ role, children, className }) {
+export function Sidebar({ role = "default", children, className }) {
     return (
         <div className={clsx(baseStyle["sidebar"], roles[role], className )}>
             {children}

@@ -14,6 +14,7 @@ Frontend Installation
     npm install docx file-saver
     npm install js-cookie
     npm install jspdf jspdf-autotable
+    npm install socket.io-client
 
 
 
@@ -34,4 +35,6 @@ Backend Installation
     npm install jsonwebtoken
     npm install luxon
     npm install @supabase/supabase-js
+    npm install socket.io
+    npm install @fastify/jwt
 

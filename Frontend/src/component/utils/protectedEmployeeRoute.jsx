@@ -2,7 +2,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import Cookies from "js-cookie";
 
 export function ProtectedEmployeeRoute({ children }) {
-  const authToken = Cookies.get("auth_token");
+  const authToken = Cookies.get("employee_token");
   const location = useLocation(); // ✅ get current path
 
   if (!authToken && location.pathname !== "/employee-login") {

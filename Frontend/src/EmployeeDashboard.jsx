@@ -58,31 +58,40 @@ function EmployeeDashboard() {
     const formatTime = (timeStr) => {
       if (!timeStr) return "-";
       const parsed = parse(timeStr, "HH:mm:ss", new Date());
-      return format(parsed, "h:mm a"); // 24h → 12h AM/PM
+      return format(parsed, "h:mm a");
     };
 
-    const morningShift = daySchedules[0]
-      ? (
-          <div className="flex flex-col">
-            <span className="whitespace-nowrap">
-              {`${formatTime(daySchedules[0].start_time)} - ${formatTime(daySchedules[0].end_time)}`}
-            </span>
-            {daySchedules[0].task && <span>({daySchedules[0].task})</span>}
-          </div>
-        )
-      : "-";
+    // Classify shifts
+    let morningShiftData = null;
+    let eveningShiftData = null;
 
-    const eveningShift = daySchedules[1]
-      ? (
-          <div className="flex flex-col">
-            <span className="whitespace-nowrap">
-              {`${formatTime(daySchedules[1].start_time)} - ${formatTime(daySchedules[1].end_time)}`}
-            </span>
-            {daySchedules[1].task && <span>({daySchedules[1].task})</span>}
-          </div>
-        )
-      : "-";
+    daySchedules.forEach((shift) => {
+      const startHour = parse(shift.start_time, "HH:mm:ss", new Date()).getHours();
 
+      if (startHour >= 7 && startHour <= 13) {
+        morningShiftData = shift;
+      } else if (startHour >= 15 && startHour <= 20) {
+        eveningShiftData = shift;
+      }
+    });
+
+    const morningShift = morningShiftData ? (
+      <div className="flex flex-col">
+        <span className="whitespace-nowrap">
+          {`${formatTime(morningShiftData.start_time)} - ${formatTime(morningShiftData.end_time)}`}
+        </span>
+        {morningShiftData.task && <span>({morningShiftData.task})</span>}
+      </div>
+    ) : "-";
+
+    const eveningShift = eveningShiftData ? (
+      <div className="flex flex-col">
+        <span className="whitespace-nowrap">
+          {`${formatTime(eveningShiftData.start_time)} - ${formatTime(eveningShiftData.end_time)}`}
+        </span>
+        {eveningShiftData.task && <span>({eveningShiftData.task})</span>}
+      </div>
+    ) : "-";
 
     return {
       key: i,
@@ -91,6 +100,7 @@ function EmployeeDashboard() {
       evening: eveningShift,
     };
   });
+
 
 
 

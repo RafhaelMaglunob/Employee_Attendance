@@ -1,9 +1,11 @@
 // server.js
 import Fastify from "fastify";
+import fastifyJwt from "@fastify/jwt";
 import cors from "@fastify/cors"
 import 'dotenv/config'
 import bcrypt from 'bcrypt'
 import { pool } from './db/pool.js';
+import { initSocket } from './socket.js';
 import { createEmployeesTable } from "./db/employee.js";
 import { createArchiveTable } from "./db/archive.js";
 
@@ -17,6 +19,20 @@ import { adminAccountRoutes } from "./routes/adminAccountRoute.js";
 import { employeeAccountRoutes } from "./routes/employeeAccountRoute.js";
 
 const fastify = Fastify();
+const io = initSocket(fastify.server);
+
+
+fastify.register(fastifyJwt, {
+  secret: "yourSuperSecretKeyHere",
+});
+
+fastify.decorate("authenticate", async function (req, reply) {
+  try {
+    await req.jwtVerify();
+  } catch (err) {
+    return reply.status(401).send({ error: "Invalid or expired token" });
+  }
+});
 
 await fastify.register(cors, {
   origin: [
@@ -29,6 +45,7 @@ await fastify.register(cors, {
 });
 
 fastify.decorate("pg", pool)
+fastify.decorate("io", io);
 
 fastify.get("/setup", async(req, reply) => {
     const client = await pool.connect()
@@ -49,12 +66,12 @@ fastify.get("/", async (req, res) => {
   return { message: "🚀 Server is running!" };
 });
 
-fastify.register( employeeRoutes, {prefix: "/api"} )
-fastify.register( archiveRoutes, {prefix: "/api"} )
-fastify.register( logRoutes, {prefix: "/api"} )
-fastify.register( attendanceRoutes, {prefix: "/api"} )
-fastify.register( adminAccountRoutes, {prefix: "/api"} )
-fastify.register( employeeAccountRoutes, {prefix: "/api"})
+fastify.register( employeeRoutes, {prefix: "/api", io} )
+fastify.register( archiveRoutes, {prefix: "/api", io} )
+fastify.register( logRoutes, {prefix: "/api", io} )
+fastify.register( attendanceRoutes, {prefix: "/api", io} )
+fastify.register( adminAccountRoutes, {prefix: "/api", io} )
+fastify.register( employeeAccountRoutes, {prefix: "/api", io})
 
 await initEmployeeDeletionSchedules(pool)
   .then(() => console.log('✅ Employee deletion scheduler started'))

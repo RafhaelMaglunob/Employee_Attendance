@@ -98,6 +98,28 @@ CREATE TABLE IF NOT EXISTS employee_dependents (
     gcash_number VARCHAR(20)
 );
 
+CREATE TABLE employee_requests (
+    request_id SERIAL PRIMARY KEY,
+    employee_id TEXT NOT NULL REFERENCES employees(employee_id), 
+    request_type VARCHAR(20) CHECK (request_type IN ('leave', 'overtime', 'off-set')) NOT NULL,
+    type VARCHAR(50),
+    days INTEGER,
+    start_date DATE,
+    end_date DATE,
+    date DATE,
+    hours NUMERIC,
+    status VARCHAR(20) DEFAULT 'pending' 
+        CHECK (status IN ('pending', 'approved', 'rejected', 'partial')),
+    admin_comment TEXT,
+    shift VARCHAR(20),
+    return_date DATE,
+    remarks TEXT,
+    reason TEXT,
+    link TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
 -- Archive Employees (independent of original employees)
 CREATE TABLE IF NOT EXISTS employees_archive (
     employee_id TEXT PRIMARY KEY,
@@ -240,6 +262,7 @@ CREATE TABLE IF NOT EXISTS employee_attendance_archive (
     status VARCHAR(100)
 );
 
+
 CREATE TABLE IF NOT EXISTS employee_schedule (
     schedule_id SERIAL PRIMARY KEY,
     employee_id TEXT NOT NULL,          -- match type in employees table
@@ -254,6 +277,71 @@ CREATE TABLE IF NOT EXISTS employee_schedule (
         FOREIGN KEY(employee_id)
         REFERENCES employees(employee_id)
         ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS leave_requests (
+    request_id SERIAL PRIMARY KEY,
+    employee_id TEXT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL,
+    days INT,
+    start_date DATE,
+    end_date DATE,
+    reason TEXT,
+    attach_link TEXT,
+    status VARCHAR(50) DEFAULT 'Pending', -- optional approval workflow
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS leave_requests_archive (
+    request_id SERIAL PRIMARY KEY,
+    employee_id TEXT NOT NULL REFERENCES employees_archive(employee_id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL,
+    days INT,
+    start_date DATE,
+    end_date DATE,
+    reason TEXT,
+    attach_link TEXT,
+    status VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+CREATE TABLE IF NOT EXISTS overtime_requests (
+    request_id SERIAL PRIMARY KEY,
+    employee_id TEXT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL,
+    date DATE,
+    hours DECIMAL(5,2),
+    reason TEXT,
+    attach_link TEXT,
+    status VARCHAR(50) DEFAULT 'Pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS overtime_requests_archive (
+    request_id SERIAL PRIMARY KEY,
+    employee_id TEXT NOT NULL REFERENCES employees_archive(employee_id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL,
+    date DATE,
+    hours DECIMAL(5,2),
+    reason TEXT,
+    attach_link TEXT,
+    status VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE employee_availability (
+    id SERIAL PRIMARY KEY,
+    employee_id INT NOT NULL,
+    date DATE NOT NULL,
+    opening BOOLEAN DEFAULT FALSE,
+    closing BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 
@@ -290,3 +378,29 @@ ADD CONSTRAINT employee_dependents_employee_id_unique UNIQUE (employee_id);
 ALTER TABLE employee_contracts
 ALTER COLUMN end_of_contract DROP NOT NULL;
 
+
+-- Archive attendance
+ALTER TABLE employee_attendance_archive
+ALTER COLUMN employee_id TYPE TEXT USING employee_id::text;
+
+-- Archive incident reports
+ALTER TABLE incident_reports_archive
+ALTER COLUMN employee_id TYPE TEXT USING employee_id::text;
+
+-- Archive employee documents
+ALTER TABLE employee_documents_archive
+ALTER COLUMN employee_id TYPE TEXT USING employee_id::text;
+
+-- Archive contracts
+ALTER TABLE employee_contracts_archive
+ALTER COLUMN employee_id TYPE TEXT USING employee_id::text;
+
+-- Archive users
+ALTER TABLE users_archive
+ALTER COLUMN employee_id TYPE TEXT USING employee_id::text;
+ALTER TABLE employee_dependents_archive ALTER COLUMN employee_id TYPE text;
+ALTER TABLE employee_documents_archive ALTER COLUMN employee_id TYPE text;
+ALTER TABLE employee_attendance_archive ALTER COLUMN employee_id TYPE text;
+ALTER TABLE incident_reports_archive ALTER COLUMN employee_id TYPE text;
+ALTER TABLE employee_contracts_archive ALTER COLUMN employee_id TYPE text;
+ALTER TABLE users_archive ALTER COLUMN employee_id TYPE text;
