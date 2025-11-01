@@ -32,8 +32,16 @@ function EmployeeIncident() {
     <div className="font-inter flex flex-col text-black">
 
       {/* Back + Title */}
-      <div className="flex items-center gap-2 py-2 px-1 cursor-pointer text-sm">
-        <span onClick={() => navigate(-1)} className="text-xl">&#60;</span>
+      <div
+        onClick={() => {
+            if (window.history.length > 1) {
+                navigate(-1);
+            } else {
+                navigate("/dashboard"); // or whatever default page
+            }
+        }} 
+        className="flex w-fit items-center gap-2 text-sm cursor-pointer px-1">
+        <span className="text-xl">&#60;</span>
         <p className="font-medium">Incident Reports</p>
       </div>
 

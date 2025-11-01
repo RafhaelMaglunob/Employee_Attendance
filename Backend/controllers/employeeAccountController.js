@@ -7,6 +7,11 @@ const TIME_RANGES = {
     Closing: { start_time: '18:00:00', end_time: '23:00:00' },
 };
 
+const isGoogleDriveLink = (url) => {
+    return /^https:\/\/drive\.google\.com\/file\/d\/[a-zA-Z0-9_-]+(\/.*)?$/.test(url);
+};
+
+
 export function employeeAccountController(pool, io) {
 
     const getLoginEmployeeAccount = async (req, reply) => {
@@ -90,7 +95,200 @@ export function employeeAccountController(pool, io) {
         }
     };
 
+    const addEmployeeDocuments = async (req, reply) => {
+        const { id: employeeId } = req.params;
+        const { documentType, link } = req.body;
 
+        try {
+            // Validation
+            if (!documentType || !link) {
+                return reply.status(400).send({
+                    success: false,
+                    message: 'Document type and link are required'
+                });
+            }
+
+            if (!isGoogleDriveLink(link)) {
+                return reply.status(400).send({
+                    success: false,
+                    message: 'Only Google Drive links are allowed (must start with https://drive.google.com/file/d/)'
+                });
+            }
+
+            const client = await pool.connect();
+            try {
+                // Check if document already exists
+                const existingRes = await client.query(
+                    'SELECT document_id FROM employee_documents WHERE employee_id = $1 AND document_type = $2',
+                    [employeeId, documentType]
+                );
+
+                if (existingRes.rowCount > 0) {
+                    // Update existing
+                    await client.query(
+                        'UPDATE employee_documents SET link = $1, status = $2, updated_at = NOW() WHERE employee_id = $3 AND document_type = $4',
+                        [link, 'Approved', employeeId, documentType]
+                    );
+                } else {
+                    // Insert new
+                    await client.query(
+                        'INSERT INTO employee_documents (employee_id, document_type, link, status, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW())',
+                        [employeeId, documentType, link, 'Approved']
+                    );
+                }
+            } finally {
+                client.release();
+            }
+
+            return reply.send({
+                success: true,
+                message: 'Document link saved successfully',
+                document: { documentType, link, status: 'Approved' }
+            });
+
+        } catch (error) {
+            console.error('Error saving document:', error);
+            return reply.status(500).send({
+                success: false,
+                message: 'Failed to save document link'
+            });
+        }
+    };
+
+    const getEmployeeDocuments = async (req, reply) => {
+        const { id: employeeId } = req.params;
+
+        try {
+            const client = await pool.connect();
+            let documents;
+            try {
+                const res = await client.query(
+                    'SELECT document_id, document_type, link, status FROM employee_documents WHERE employee_id = $1 ORDER BY document_type',
+                    [employeeId]
+                );
+                documents = res.rows;
+            } finally {
+                client.release();
+            }
+
+            return reply.send({ success: true, documents });
+
+        } catch (error) {
+            console.error('Error fetching documents:', error);
+            return reply.status(500).send({
+                success: false,
+                message: 'Failed to fetch documents'
+            });
+        }
+    };
+
+    // GET - Check document completion status
+    const getDocumentCompletion = async (req, reply) => {
+        const { id: employeeId } = req.params;
+
+        try {
+            const requiredDocuments = ['SSS ID', 'Resume/CV', 'Pag-Ibig', 'PhilHealth', 'Barangay Clearance'];
+
+            const [documents] = await req.server.db.execute(
+                'SELECT document_type, status FROM employee_documents WHERE employee_id = ?',
+                [employeeId]
+            );
+
+            const completionStatus = {};
+            requiredDocuments.forEach(docType => {
+                const doc = documents.find(d => d.document_type === docType);
+                completionStatus[docType] = doc ? doc.status : 'Incomplete';
+            });
+
+            const allComplete = requiredDocuments.every(
+                docType => completionStatus[docType] === 'Approved'
+            );
+
+            const totalCompleted = Object.values(completionStatus).filter(s => s === 'Approved').length;
+
+            return reply.send({
+                success: true,
+                allComplete,
+                completionStatus,
+                totalRequired: requiredDocuments.length,
+                totalCompleted
+            });
+
+        } catch (error) {
+            console.error('Error checking completion:', error);
+            return reply.status(500).send({
+                success: false,
+                message: 'Failed to check document completion'
+            });
+        }
+    };
+
+    // DELETE - Remove a document
+    const deleteEmployeeDocument = async (req, reply) => {
+        const { documentId } = req.params;
+
+        console.log("D")
+        try {
+            const client = await pool.connect();
+            try {
+                await client.query(
+                    `UPDATE employee_documents SET link = '' WHERE document_id = $1`,
+                    [documentId]
+                );
+            } finally {
+                client.release();
+            }
+
+            return reply.send({
+                success: true,
+                message: 'Document deleted successfully'
+            });
+
+        } catch (error) {
+            console.error('Error deleting document:', error);
+            return reply.status(500).send({
+                success: false,
+                message: 'Failed to delete document'
+            });
+        }
+    };
+
+    // PUT - Update document status
+    const updateDocumentStatus = async (req, reply) => {
+        const { documentId } = req.params;
+        const { status } = req.body;
+
+        try {
+            if (!['Pending', 'Approved', 'Incomplete'].includes(status)) {
+                return reply.status(400).send({
+                    success: false,
+                    message: 'Invalid status. Must be Pending, Approved, or Incomplete'
+                });
+            }
+
+            const client = await pool.connect();
+            try {
+                await client.query(
+                    'UPDATE employee_documents SET status = $1, updated_at = NOW() WHERE document_id = $2',
+                    [status, documentId]
+                );
+            } finally {
+                client.release();
+            }
+
+            return reply.send({
+                success: true,
+                message: 'Document status updated successfully'
+            });
+
+        } catch (error) {
+            console.error('Error updating status:', error);
+            return reply.status(500).send({
+                success: false,
+                message: 'Failed to update document status'
+            });
+        }
+    };
 
     const getEmployeeSchedule = async (req, reply) => {
         const { id } = req.params;
@@ -203,7 +401,7 @@ export function employeeAccountController(pool, io) {
             return reply.status(500).send({ success: false, message: "Failed to get notification count" });
         }
     };
-
+    
     const resetNotificationCount = async (req, reply) => {
         const { id } = req.params; // employeeId
 
@@ -226,12 +424,83 @@ export function employeeAccountController(pool, io) {
         }
     };
 
+    const getEmployeeNotifications = async (req, reply) => {
+        const { id } = req.params;
+        try {
+            const result = await pool.query(`
+                SELECT n.*
+                FROM notifications n
+                JOIN employees e ON e.employee_id = n.employee_id
+                WHERE e.employee_id = $1
+                ORDER BY n.created_at DESC
+                LIMIT 50;
+
+            `, [id]);
+            
+            return { success: true, notifications: result.rows };
+        } catch (err) {
+            console.error(err);
+            return reply.status(500).send({ error: "Failed to fetch notifications" });
+        }
+    };
+
+    const clearEmployeeNotifications = async (req, reply) => {
+        const { id } = req.params; 
+        try {
+            const delRes = await pool.query(`
+                DELETE FROM notifications 
+                WHERE employee_id = $1 AND is_read = TRUE
+                RETURNING *
+            `, [id]);
+
+            reply.send({ success: true, deleted: delRes.rowCount });
+
+            setImmediate(async () => {
+                try {
+                    delRes.rows.forEach(row => {
+                        syncRow('notifications', row, 'id');
+                    });
+                } catch (err) {
+                    console.error("Supabase delete error:", err);
+                }
+            });
+        } catch (err) {
+            console.error(err);
+            return reply.status(500).send({ error: "Failed to clear notifications" });
+        }
+    };
+
+
+    const marKNotificationRead = async (req, reply) => {
+        const { id } = req.params;
+        
+        const client = await pool.connect();
+
+        try{
+            const updRes = await client.query(`
+                UPDATE notifications SET is_read = 'TRUE' WHERE id = $1 RETURNING *
+            `, [id])
+            const updated_notification = updRes.rows[0]
+            reply.send({ success: true, notification: updated_notification });
+
+            setImmediate(async () => {
+                try {
+                    syncRow('notifications',updated_notification, 'id');
+                } catch (err) {
+                    console.error("Supabase sync error:", err);
+                }
+            });
+        }
+        catch(err) {
+            console.error(err);
+            return reply.status(500).send({ error: "Failed to mark notifications" });
+        }
+    }
 
     const sendRequest = async (req, reply) => {
         try {
             const { id } = req.params;
             const { request_type, type, date, startDate, endDate, reason, link, hours } = req.body;
-
             if (!request_type) return reply.code(400).send({ success: false, message: "Request type required" });
 
             // Fetch all existing requests for this employee
@@ -380,7 +649,6 @@ export function employeeAccountController(pool, io) {
         }
     };
 
-
     const deleteRequest = async (req, reply) => {
         const { type, requestId } = req.params; // type = "leave" or "overtime"
 
@@ -475,6 +743,7 @@ export function employeeAccountController(pool, io) {
     return {
         getLoginEmployeeAccount,
         changeEmployeePassword,
+        addEmployeeDocuments,
         getNotificationCount,
         resetNotificationCount,
         getEmployeeSchedule,
@@ -483,6 +752,14 @@ export function employeeAccountController(pool, io) {
         getRequests,
         getLeaveDays,
         deleteRequest,
-        handleRequestAction
+        handleRequestAction,
+        getEmployeeNotifications,
+        clearEmployeeNotifications,
+        marKNotificationRead,
+        addEmployeeDocuments,
+        getEmployeeDocuments,
+        getDocumentCompletion,
+        deleteEmployeeDocument,
+        updateDocumentStatus
     };
 }

@@ -24,7 +24,7 @@ export default function AdminLayout() {
   const userRole = localStorage.getItem("userRole")?.toLowerCase();
   const userEmail = localStorage.getItem("userEmail")?.toLowerCase();
   const navigate = useNavigate();
-  
+
   const location = useLocation();
   const currentPath = location.pathname.split("/")[1] || "dashboard";
   const [path, setPath] = useState(currentPath);

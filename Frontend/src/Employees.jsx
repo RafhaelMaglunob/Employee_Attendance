@@ -11,7 +11,8 @@ import AddEmployeeModal from './component/modals/AddEmployeeModal';
 import ViewEmployeeModal from './component/modals/viewEmployeeModal';
 import DeleteEmployeeModal from './component/modals/deleteEmployeeModal';
 import RetrieveEmployeeModal from './component/modals/retrieveEmployeeModal';
-import RenewContractModal from './component/modals/RenewContractModal'; // ✅ Import this
+import RenewContractModal from './component/modals/RenewContractModal'; 
+import DocumentEmployeeModal from './component/modals/documentEmployeeModal';
 
 const tabList = ["Employed", "Archive"];
 
@@ -40,10 +41,14 @@ function Employees() {
 	const [api, setApi] = useState(activeTab === "employed" ? "employees" : "archive");
 	const [selectedSort, setSelectedSort] = useState(savedSort);
 	const [selectedId, setSelectedId] = useState(null);
+
 	const [isAddOpen, setIsAddOpen] = useState(false);
 	const [isViewOpen, setIsViewOpen] = useState(false);
 	const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 	const [isRetrieveOpen, setIsRetrieveOpen] = useState(false);
+	const [isDocumentOpen, setIsDocumentOpen] = useState(false);
+	const [documentEmployeeId, setDocumentEmployeeId] = useState(null);
+
 
 	// ✅ Added for RenewContractModal
 	const [isRenewOpen, setIsRenewOpen] = useState(false);
@@ -52,10 +57,23 @@ function Employees() {
 	useEffect(() => { localStorage.setItem("employeeSortTable", selectedSort); }, [selectedSort]);
 	useEffect(() => { localStorage.setItem("employeeTab", activeTab); }, [activeTab]);
 
-	const handleView = (row) => { setSelectedId(row.employee_id); setIsViewOpen(true); };
-	const handleRetrieve = (row) => { setSelectedId(row.employee_id); setIsRetrieveOpen(true); };
-	const handleDelete = (row) => { setSelectedId(row.employee_id); setIsDeleteOpen(true); };
-	const handleDocuments = () => {};
+	const handleView = (row) => { 
+		setSelectedId(row.employee_id); 
+		setIsViewOpen(true); 
+	};
+	const handleRetrieve = (row) => { 
+		setSelectedId(row.employee_id); 
+		setIsRetrieveOpen(true); 
+	};
+	const handleDelete = (row) => { 
+		setSelectedId(row.employee_id); 
+		setIsDeleteOpen(true); 
+	};
+	const handleDocuments = (row) => {
+		setDocumentEmployeeId(row.employee_id);
+		setIsDocumentOpen(true);
+	};
+
 
 	// ✅ Listen for Retrieve success → open RenewContractModal
 	useEffect(() => {
@@ -207,7 +225,8 @@ function Employees() {
 			<ViewEmployeeModal isOpen={isViewOpen} onClose={() => setIsViewOpen(false)} employeeId={selectedId} updateData={updateData} api={api} />
 			<DeleteEmployeeModal isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} employeeId={selectedId} updateData={updateData} api={api} />
 			<RetrieveEmployeeModal isOpen={isRetrieveOpen} onClose={() => setIsRetrieveOpen(false)} employeeId={selectedId} updateData={updateData} api={api} />
-			<RenewContractModal isOpen={isRenewOpen} onClose={() => setIsRenewOpen(false)} employeeId={renewEmployeeId} updateData={updateData} /> {/* ✅ Added */}
+			<RenewContractModal isOpen={isRenewOpen} onClose={() => setIsRenewOpen(false)} employeeId={renewEmployeeId} updateData={updateData} /> 
+			<DocumentEmployeeModal isOpen={isDocumentOpen} onClose={() => setIsDocumentOpen(false)} employeeId={documentEmployeeId} />
 		</div>
 	);
 }

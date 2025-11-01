@@ -3,35 +3,40 @@ import { sendEmployeeEmail } from '../utils/sendEmail.js';
 import { scheduleEmployeeDeletion } from '../utils/employeeDeletionScheduler.js';
 import { calculateAge } from '../utils/calculateAge.js';
 import { syncRow, deleteRow } from '../utils/syncToSupabase.js';
-import { getIo } from "../socket.js";
+import { sendNotification, generateRequestNotificationMessage } from '../utils/notificationHelper.js';
 
+import { getIo } from "../socket.js";
 
 export function employeeController(pool) {
 
     const getAllEmployees = async (req, reply) => {
         try {
+            const requiredDocuments = ['SSS ID', 'Resume/CV', 'Pag-Ibig', 'PhilHealth', 'Barangay Clearance'];
+
             const result = await pool.query(`
                 SELECT e.*,
                     CASE
-                        WHEN d.sss_id IS NOT NULL
-                            AND d.resume_cv IS NOT NULL
-                            AND d.pagibig IS NOT NULL
-                            AND d.philhealth IS NOT NULL
-                            AND d.barangay_clearance IS NOT NULL
+                        WHEN (
+                            SELECT COUNT(*) 
+                            FROM employee_documents d
+                            WHERE d.employee_id = e.employee_id
+                            AND d.document_type = ANY($1)
+                            AND d.status = 'Approved'
+                        ) = $2
                         THEN true
                         ELSE false
                     END AS documents_complete
                 FROM employees e
-                LEFT JOIN employee_documents d
-                    ON e.employee_id = d.employee_id
                 ORDER BY e.employee_id ASC;
-            `);
+            `, [requiredDocuments, requiredDocuments.length]);
+
             return { success: true, data: result.rows };
         } catch (err) {
             console.error("Database Error:", err.message);
             reply.status(500).send({ error: "Database query failed" });
         }
     };
+
 
     const addEmployee = async (req, reply) => {
         const {
@@ -110,7 +115,7 @@ export function employeeController(pool) {
                 RETURNING id, email, fullname
             `, [d.email, d.fullname]);
             const registryRow = registry.rows[0];
-
+            
             const empRes = await client.query(`
                 INSERT INTO employees
                 (registry_id, fullname, nickname, email, position, employment_type, status, gender, contact, marital_status, birthday, address, sss_number, pagibig, philhealth)
@@ -123,6 +128,23 @@ export function employeeController(pool) {
                 d.pagibig, d.philhealth
             ]);
             const employee = empRes.rows[0];
+
+            const docTypes = ['SSS ID', 'Resume/CV', 'Pag-Ibig', 'PhilHealth', 'Barangay Clearance'];
+            const docsToSync = [];
+            for (const type of docTypes) {
+                const res = await client.query(`
+                    INSERT INTO employee_documents (employee_id, document_type, status, created_at, updated_at)
+                    VALUES ($1, $2, 'Incomplete', NOW(), NOW())
+                    RETURNING *
+                `, [employee.employee_id, type]);
+                docsToSync.push(res.rows[0]);
+            }
+
+            const empNotif = await client.query(`
+                INSERT INTO employee_notifications(employee_id, count)
+                VALUES ($1, 0)
+            `, [employee.employee_id]);
+            const notification = empNotif.rows[0];
 
             const userRes = await client.query(`
                 INSERT INTO users (employee_id, email, fullname, role, password, must_change_password)
@@ -146,6 +168,10 @@ export function employeeController(pool) {
                     await syncRow('employee_registry', registryRow, 'id');
 
                     await syncRow('employees', employee, 'employee_id');
+                    for (const doc of docsToSync) {
+                        await syncRow('employee_documents', doc, 'id');
+                    }
+                    await syncRow('employee_notifications', notification, 'employee_id');
                     await Promise.all([
                     syncRow('users', user, 'account_id'),
                     syncRow('employee_contracts', contractRow, 'contract_id')
@@ -156,10 +182,6 @@ export function employeeController(pool) {
 
                 sendEmployeeEmail(d.email, d.fullname, tempPassword).catch(() => {});
             });
-
-
-
-
         } catch (err) {
             await client.query("ROLLBACK");
             console.error(err);
@@ -435,7 +457,27 @@ export function employeeController(pool) {
                 JOIN employees e ON r.employee_id = e.employee_id
             `);
 
-            const allRequests = [...leaveRows, ...overtimeRows].sort((a, b) =>
+            const { rows: offsetRows } = await pool.query(`
+                SELECT 
+                    r.request_id,
+                    r.employee_id,
+                    e.fullname AS employee_name,
+                    'off-set' AS request_type,
+                    r.type,
+                    0 AS days,
+                    NULL AS start_date,
+                    NULL AS end_date,
+                    TO_CHAR(r.date, 'MM/DD/YYYY') AS date,
+                    r.hours,
+                    r.reason,
+                    r.attach_link AS link,
+                    r.status,
+                    TO_CHAR(r.created_at, 'MM/DD/YYYY') AS requested_at
+                FROM offset_requests r
+                JOIN employees e ON r.employee_id = e.employee_id
+            `);
+
+            const allRequests = [...leaveRows, ...overtimeRows, ...offsetRows].sort((a, b) =>
                 new Date(b.requested_at) - new Date(a.requested_at)
             );
 
@@ -447,68 +489,112 @@ export function employeeController(pool) {
         }
     };
 
-
-
     const updateEmployeeRequest = async (req, reply) => {
-        const io = req.server.io; // socket.io instance
-        const { type, requestId } = req.params; // type = "leave" | "overtime"
+        const io = getIo();
+        const { type, requestId } = req.params;
         const { status, remarks, days, hours } = req.body;
 
-        if (!["leave", "overtime"].includes(type)) 
-            return reply.code(400).send({ success: false, message: "Invalid request type" });
-
-        const table = type === "leave" ? "leave_requests" : "overtime_requests";
+        const table = type === "leave" ? "leave_requests" : type === "overtime" ? "overtime_requests" : "offset_requests";
         const client = await pool.connect();
 
         try {
             await client.query("BEGIN");
 
-            const empReq = await client.query(
-                `SELECT * FROM ${table} WHERE request_id = $1`,
-                [requestId]
-            );
+            const resQuery = await client.query(`SELECT * FROM ${table} WHERE request_id = $1`, [requestId]);
+            if (!resQuery.rows.length) return reply.status(404).send({ success: false, message: "Request not found" });
 
-            if (!empReq.rows.length) {
-                await client.query("ROLLBACK");
-                return reply.status(404).send({ success: false, message: "Request not found" });
+            const reqData = resQuery.rows[0];
+
+            const params = [status || reqData.status, remarks || reqData.remarks];
+            let updateQuery = `UPDATE ${table} SET status = $1, remarks = $2`;
+
+            if (type === "leave") {
+                updateQuery += `, days = COALESCE($3, days)`;
+                params.push(days);
+            } else {
+                updateQuery += `, hours = COALESCE($3, hours)`;
+                params.push(hours);
             }
 
-            const empResult = empReq.rows[0];
+            updateQuery += ` WHERE request_id = $4 RETURNING *`;
+            params.push(requestId);
 
-            const updateRes = await client.query(
-                `UPDATE ${table}
-                SET status = $1,
-                    remarks = $2,
-                    days = COALESCE($3, days),
-                    hours = COALESCE($4, hours)
-                WHERE request_id = $5
-                RETURNING *`,
-                [status || empResult.status, remarks || empResult.remarks, days, hours, requestId]
+            const updated = (await client.query(updateQuery, params)).rows[0];
+            
+            // Get employee name for admin display
+            const employeeRes = await client.query(
+                `SELECT fullname FROM employees WHERE employee_id = $1`, 
+                [updated.employee_id]
+            );
+            const employeeName = employeeRes.rows[0]?.fullname || "Unknown";
+
+            // ✅ Send notification using helper
+            const notificationMessage = generateRequestNotificationMessage(
+                type, 
+                updated.type, 
+                status, 
+                remarks
+            );
+            
+            await sendNotification(
+                pool,
+                updated.employee_id,
+                type,
+                status,
+                notificationMessage,
+                client // Pass client to use same transaction
             );
 
-            const updatedRequest = updateRes.rows[0];
             await client.query("COMMIT");
 
-            // Emit socket event
-            io.emit(`${type}RequestUpdated`, {
-                ...updatedRequest,
+            // Prepare the payload
+            const payload = {
+                request_id: updated.request_id,
+                employee_id: updated.employee_id,
+                employee_name: employeeName,
                 request_type: type,
-                status: updatedRequest.status.toLowerCase(),
-            });
+                type: updated.type,
+                status: updated.status?.toLowerCase(),
+                remarks: updated.remarks,
+                reason: updated.reason,
+                link: updated.attach_link,
+                admin_comment: updated.remarks,
+                ...(type === "leave" ? {
+                    days: updated.days,
+                    start_date: updated.start_date,
+                    end_date: updated.end_date,
+                    date: null,
+                    hours: 0
+                } : {
+                    date: updated.date,
+                    hours: updated.hours,
+                    start_date: null,
+                    end_date: null,
+                    days: 0
+                })
+            };
 
-            return reply.send({ success: true, data: updatedRequest });
+            const eventName = type === "off-set" 
+                ? "off-setRequestUpdated" 
+                : `${type}RequestUpdated`;
 
+            console.log(`📡 Emitting ${eventName} to employee_${updated.employee_id}`);
+
+            // Emit request update
+            io.to(`employee_${updated.employee_id}`).emit(eventName, payload);
+            
+            // Emit to admins
+            io.emit("adminRequestUpdated", payload);
+
+            return reply.send({ success: true, data: updated });
         } catch (err) {
             await client.query("ROLLBACK");
-            console.error("Error updating employee request:", err.message);
+            console.error("❌ Update request error:", err);
             return reply.status(500).send({ success: false, message: "Failed to update request" });
         } finally {
             client.release();
         }
     };
-
-
-
 
 
     return {

@@ -118,29 +118,25 @@ CREATE TABLE employee_contracts_archive (
 
 -- Employee Documents
 CREATE TABLE employee_documents (
-    document_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    employee_id TEXT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
-    sss_id VARCHAR(255),
-    resume_cv VARCHAR(255),
-    pagibig VARCHAR(255),
-    philhealth VARCHAR(255),
-    barangay_clearance VARCHAR(255),
-    status VARCHAR(20) DEFAULT 'Incomplete',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	document_id SERIAL PRIMARY KEY,
+	employee_id TEXT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+	document_type VARCHAR(100) NOT NULL,
+	link TEXT NOT NULL,
+	status VARCHAR(20) DEFAULT 'Pending' CHECK (status IN ('Pending', 'Approved', 'Incomplete')),
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE (employee_id, document_type)
 );
 
 CREATE TABLE employee_documents_archive (
-    document_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    document_id SERIAL PRIMARY KEY,
     employee_id TEXT NOT NULL REFERENCES employees_archive(employee_id) ON DELETE CASCADE,
-    sss_id VARCHAR(255),
-    resume_cv VARCHAR(255),
-    pagibig VARCHAR(255),
-    philhealth VARCHAR(255),
-    barangay_clearance VARCHAR(255),
-    status VARCHAR(20) DEFAULT 'Incomplete',
+    document_type VARCHAR(100) NOT NULL,
+    link TEXT NOT NULL,
+    status VARCHAR(20) DEFAULT 'Pending' CHECK (status IN ('Pending', 'Approved', 'Incomplete')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (employee_id, document_type)
 );
 
 -- Employee Dependents
@@ -177,6 +173,7 @@ CREATE TABLE leave_requests (
     start_date DATE,
     end_date DATE,
     reason TEXT,
+    remarks TEXT DEFAULT '',
     attach_link TEXT,
     status VARCHAR(50) DEFAULT 'Pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -191,6 +188,7 @@ CREATE TABLE leave_requests_archive (
     start_date DATE,
     end_date DATE,
     reason TEXT,
+    remarks TEXT DEFAULT '',
     attach_link TEXT,
     status VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -204,6 +202,7 @@ CREATE TABLE overtime_requests (
     date DATE,
     hours DECIMAL(5,2),
     reason TEXT,
+    remarks TEXT DEFAULT '',
     attach_link TEXT,
     status VARCHAR(50) DEFAULT 'Pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -217,6 +216,35 @@ CREATE TABLE overtime_requests_archive (
     date DATE,
     hours DECIMAL(5,2),
     reason TEXT,
+    remarks TEXT DEFAULT '',
+    attach_link TEXT,
+    status VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE offset_requests (
+    request_id SERIAL PRIMARY KEY,
+    employee_id TEXT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL,
+    date DATE,
+    hours DECIMAL(5,2),
+    reason TEXT,
+    remarks TEXT DEFAULT '',
+    attach_link TEXT,
+    status VARCHAR(50) DEFAULT 'Pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE offset_requests_archive (
+    request_id SERIAL PRIMARY KEY,
+    employee_id TEXT NOT NULL REFERENCES employees_archive(employee_id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL,
+    date DATE,
+    hours DECIMAL(5,2),
+    reason TEXT,
+    remarks TEXT DEFAULT '',
     attach_link TEXT,
     status VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -224,10 +252,19 @@ CREATE TABLE overtime_requests_archive (
 );
 
 
--- Employee Notifications
 CREATE TABLE employee_notifications (
-    employee_id TEXT PRIMARY KEY REFERENCES employees(employee_id),
+    employee_id TEXT PRIMARY KEY REFERENCES employees(employee_id) ON DELETE CASCADE,
     count INT DEFAULT 0
+);
+
+CREATE TABLE notifications (
+    id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees(employee_id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL,
+    action VARCHAR(50) NOT NULL,
+    message TEXT,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Attendance
@@ -254,13 +291,13 @@ CREATE TABLE employee_attendance_archive (
 -- Employee Schedule
 CREATE TABLE employee_schedule (
     schedule_id SERIAL PRIMARY KEY,
-    employee_id TEXT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+    employee_id TEXT NOT NULL REFERENCES employees(employee_id, work_date) ON DELETE CASCADE,
     work_date DATE NOT NULL,
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
     task VARCHAR(255),
     status VARCHAR(20),
-    work_location VARCHAR(20),
+    work_location VARCHAR(50),
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -330,3 +367,6 @@ CREATE TABLE employee_deletion_schedule (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+ALTER TABLE employee_schedule
+ADD CONSTRAINT uniq_employee_day UNIQUE (employee_id, work_date);

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Button } from "./component/ui/button";
-import DynamicForm from "./component/form/Form";  
-import { io } from "socket.io-client";
-
+import DynamicForm from "./component/form/Form";    
+import { useOutletContext } from "react-router-dom";
+import { useSocket } from "./component/utils/SocketContext";
 
 import MessageModal from "./component/modals/MessageModal";
 import ConfirmModal from "./component/modals/ConfirmModal";
@@ -28,57 +28,60 @@ export default function EmployeeReport() {
     overtime: "overtime",
     "off-set": "off-set",
   };
-  
+
+  const [recentRequests, setRecentRequests] = useState({});
+  const { socket, isConnected } = useSocket();
+
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, message: "", onConfirm: null });
   const [messageModal, setMessageModal] = useState({ isOpen: false, title: "", message: "" });
   
   const savedTab = localStorage.getItem("employeeTabs")?.toLowerCase() || "leave";
   const [activeTab, setActiveTab] = useState(savedTab);
   const [formValues, setFormValues] = useState({});
-  const [recentRequests, setRecentRequests] = useState({});
   const [scheduleDays, setScheduleDays] = useState([]);
   const [formattedDays, setFormattedDays] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const didFetchRef = useRef(false);
-  const socketRef = useRef(null);
 
   const openRequestModal = (req) => {
     setSelectedRequest(req);
     setIsModalOpen(true);
   };
-  
+
   useEffect(() => {
-    socketRef.current = io("http://localhost:3001");
+    if (!socket || !isConnected) {
+      console.log("⏳ Waiting for socket connection...");
+      return;
+    }
 
-    const handleUpdate = (updatedRequest) => {
-      const reqTab = updatedRequest.request_type.toLowerCase();
+    console.log("🔌 Setting up socket listeners");
+
+    const handleUpdate = (updatedReq) => {
+      console.log("📨 Received update:", updatedReq);
       setRecentRequests(prev => {
-        const prevTabRequests = prev[reqTab] || [];
-        const updatedTabRequests = prevTabRequests.map(req =>
-          req.request_id === updatedRequest.request_id ? updatedRequest : req
-        );
+        const type = updatedReq.request_type;
+        const list = prev[type] || [];
+        const index = list.findIndex(r => r.request_id === updatedReq.request_id);
+        if (index !== -1) list[index] = { ...list[index], ...updatedReq };
+        else list.unshift(updatedReq);
 
-        // If not found, add new
-        if (!prevTabRequests.find(r => r.request_id === updatedRequest.request_id)) {
-          updatedTabRequests.push(updatedRequest);
-        }
-
-        return { ...prev, [reqTab]: updatedTabRequests };
+        return { ...prev, [type]: [...list] };
       });
     };
 
-    socketRef.current.on("employeeRequestUpdated", handleUpdate);
+    socket.on("leaveRequestUpdated", handleUpdate);
+    socket.on("overtimeRequestUpdated", handleUpdate);
+    socket.on("off-setRequestUpdated", handleUpdate);
 
     return () => {
-      socketRef.current.off("employeeRequestUpdated", handleUpdate);
-      socketRef.current.disconnect();
+      console.log("🧹 Cleaning up socket listeners");
+      socket.off("leaveRequestUpdated", handleUpdate);
+      socket.off("overtimeRequestUpdated", handleUpdate);
+      socket.off("off-setRequestUpdated", handleUpdate);
     };
-  }, []); // <- empty dependency array
-
-
-
+  }, [socket, isConnected]);
 
   useEffect(() => {
     if (didFetchRef .current) return;
@@ -324,7 +327,6 @@ export default function EmployeeReport() {
             body: JSON.stringify({ action }) // accept / decline
           });
 
-          // Socket will automatically update the request in your list
           setIsModalOpen(false);
         } catch (err) {
           setMessageModal({ isOpen: true, title: "Error", message: "Error performing action" });
