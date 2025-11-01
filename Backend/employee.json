@@ -1,0 +1,28 @@
+{
+  "fullname": "Load Test User 2",
+  "nickname": "Tester",
+  "email": "loadtest2@test.com",
+  "position": "Staff",
+  "employment_type": "Full-Time",
+  "status": "Active",
+  "gender": "Male",
+  "contact": "639123456780",
+  "marital_status": "Single",
+  "birthday": "1999-01-01",
+  "address": "Sample City",
+  "sss_number": "12-1234567-9",
+  "pagibig": "1234-5678-9013",
+  "philhealth": "12-123456789-1",
+  
+  "emergency_name": "Emergency Person",
+  "relationship": "Father",
+  "emergency_address": "Emergency Address 2",
+  "emergency_contact": "639876543211",
+
+  "city": "Metro City",
+  "postal_code": "1235",
+  "gcash_no": "639555555556",
+
+  "start_of_contract": "2025-01-02",
+  "end_of_contract": "2025-12-30"
+}

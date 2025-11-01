@@ -3,13 +3,14 @@ import Fastify from "fastify";
 import fastifyJwt from "@fastify/jwt";
 import cors from "@fastify/cors"
 import 'dotenv/config'
-import bcrypt from 'bcrypt'
 import { pool } from './db/pool.js';
 import { initSocket } from './socket.js';
 import { createEmployeesTable } from "./db/employee.js";
 import { createArchiveTable } from "./db/archive.js";
+import argon2 from "argon2";
 
 import { initEmployeeDeletionSchedules } from "./utils/employeeDeletionScheduler.js";
+import "./utils/scheduler.js";
 
 import { employeeRoutes } from "./routes/employeeRoute.js";
 import { archiveRoutes } from "./routes/archiveRoute.js";
@@ -21,6 +22,8 @@ import { employeeAccountRoutes } from "./routes/employeeAccountRoute.js";
 const fastify = Fastify();
 const io = initSocket(fastify.server);
 
+fastify.decorate("pg", pool)
+fastify.decorate("io", io);
 
 fastify.register(fastifyJwt, {
   secret: "yourSuperSecretKeyHere",
@@ -44,8 +47,6 @@ await fastify.register(cors, {
   credentials: true
 });
 
-fastify.decorate("pg", pool)
-fastify.decorate("io", io);
 
 fastify.get("/setup", async(req, reply) => {
     const client = await pool.connect()

@@ -1,10 +1,103 @@
---Drop Table
-DROP TABLE IF EXISTS 
-    employee_dependents,
-    employee_dependents_archive,
-    employee_documents,
-    employee_documents_archive,
-    employees,
-    employees_archive
+TRUNCATE 
+    
+    audit_logs,                  
+    employee_attendance,         
+    employee_attendance_archive, 
+    employee_contracts,          
+    employee_contracts_archive,  
+    employee_dependents,         
+    employee_dependents_archive, 
+    employee_documents,         
+    employee_documents_archive,  
+    employee_notifications,      
+    employee_registry,           
+    employee_requests,           
+    employee_schedule,          
+    employee_work_logs,         
+    employees,                   
+    employees_archive,           
+    incident_reports,            
+    incident_reports_archive,    
+    leave_requests,              
+    leave_requests_archive,      
+    overtime_requests,          
+    overtime_requests_archive,   
+    users,                       
+    users_archive  
 CASCADE;
-                        
+
+TRUNCATE TABLE employees CASCADE;
+TRUNCATE TABLE employee_registry CASCADE;
+TRUNCATE TABLE users CASCADE;
+
+-- Drop child tables first to avoid FK issues
+-- Drop tables in order to avoid FK constraint errors
+DROP TABLE IF EXISTS users_archive CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
+DROP TABLE IF EXISTS incident_reports_archive CASCADE;
+DROP TABLE IF EXISTS incident_reports CASCADE;
+
+DROP TABLE IF EXISTS audit_logs CASCADE;
+
+DROP TABLE IF EXISTS employee_dependents_archive CASCADE;
+DROP TABLE IF EXISTS employee_dependents CASCADE;
+
+DROP TABLE IF EXISTS employee_documents_archive CASCADE;
+DROP TABLE IF EXISTS employee_documents CASCADE;
+
+DROP TABLE IF EXISTS employee_contracts_archive CASCADE;
+DROP TABLE IF EXISTS employee_contracts CASCADE;
+
+DROP TABLE IF EXISTS employees_archive CASCADE;
+DROP TABLE IF EXISTS employees CASCADE;
+
+DROP TABLE IF EXISTS employee_availability CASCADE;
+DROP TABLE IF EXISTS employee_schedule CASCADE;
+
+DROP TABLE IF EXISTS leave_requests_archive CASCADE;
+DROP TABLE IF EXISTS leave_requests CASCADE;
+
+DROP TABLE IF EXISTS overtime_requests_archive CASCADE;
+DROP TABLE IF EXISTS overtime_requests CASCADE;
+
+DROP TABLE IF EXISTS employee_notifications CASCADE;
+
+DROP TABLE IF EXISTS employee_registry CASCADE;
+
+DROP TABLE IF EXISTS employee_id_seq CASCADE;
+
+
+-- Optionally drop the sequence if you want a fresh start
+DROP SEQUENCE IF EXISTS employee_id_seq;
+
+Main Employees / Related Tables
+    employee_registry
+    employees
+    employee_contracts
+    employee_documents
+    employee_dependents
+    employee_notifications
+    employee_schedule
+    employee_availability
+    leave_requests
+    overtime_requests
+    incident_reports
+    employee_attendance
+    users
+
+
+Archive Tables
+    employees_archive
+    employee_contracts_archive
+    employee_documents_archive
+    employee_dependents_archive
+    leave_requests_archive
+    overtime_requests_archive
+    incident_reports_archive
+    employee_attendance_archive
+    users_archive
+
+
+Misc / Audit
+    audit_logs

@@ -135,11 +135,16 @@ export default function EmployeeReport() {
       const res = await fetch(`http://localhost:3001/api/employee/requests/${employeeId}?type=${dbType}`);
       if (!res.ok) throw new Error("Failed to fetch requests");
       const data = await res.json();
-      if (data.success) setRecentRequests(prev => ({ ...prev, [tab]: data.data }));
+      if (data.success) {
+        // Add request_type to each item to match frontend filtering
+        const mappedData = data.data.map(r => ({ ...r, request_type: dbType }));
+        setRecentRequests(prev => ({ ...prev, [tab]: mappedData }));
+      }
     } catch (err) {
       console.error("Error fetching requests:", err);
     }
   };
+
 
   useEffect(() => {
     fetchRecentRequests(activeTab);
@@ -383,7 +388,6 @@ export default function EmployeeReport() {
               }
 
               const options = { month: "short", day: "numeric" };
-
               const displayDate =
                 activeTab === "leave"
                   ? (startDate.getTime() === endDate.getTime()
@@ -391,12 +395,13 @@ export default function EmployeeReport() {
                       : `${startDate.toLocaleDateString("en-US", options)} - ${endDate.toLocaleDateString("en-US", options)}`)
                   : startDate.toLocaleDateString("en-US", options);
 
-
               const statusColors = {
                 approved: "bg-green-100 text-green-800",
                 pending: "bg-yellow-100 text-yellow-800",
                 rejected: "bg-red-100 text-red-800",
                 partial: "bg-blue-100 text-blue-800",
+                cancelled: "bg-gray-100 text-gray-800",
+                "in-review": "bg-purple-100 text-purple-800",
               };
 
               const statusLabel = (req.status === "partial" && req.admin_comment)
@@ -415,12 +420,12 @@ export default function EmployeeReport() {
                     </p>
                     <p className="text-gray-700">{displayDate}</p>
                   </div>
-                  <span className={`px-3 py-1 rounded-full font-medium ${statusColors[req.status] || "bg-gray-100 text-gray-800"}`}>
+                  <span className={`px-3 py-1 rounded-full font-medium ${statusColors[req.status?.toLowerCase()] || "bg-gray-100 text-gray-800"}`}>
                     {statusLabel}
                   </span>
                 </div>
               );
-          })}
+            })}
         </div>
       </div>
       <RequestModal

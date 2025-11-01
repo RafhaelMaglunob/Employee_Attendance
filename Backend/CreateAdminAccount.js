@@ -12,7 +12,7 @@
 //       process.exit(0)
 //     }
 
-//     const hash = await bcrypt.hash(password, 12)
+//     const hash = await argon2.hash(password, 12)
 
 //     const result = await pool.query(
 //       `INSERT INTO users (email, password, fullname, role)

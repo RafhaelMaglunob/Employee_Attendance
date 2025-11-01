@@ -3,15 +3,13 @@ import { DateTime } from 'luxon';
 import { syncRow, deleteRow } from './syncToSupabase.js';
 import { sendDeactivationScheduledEmail, sendEmployeeDeactivatedEmail } from './sendEmail.js';
 
+const scheduledJobs = new Map();
+
 const getDeletionTime = (deletionDate) => {
     if (!deletionDate) return null;
-    let dt;
-    if (deletionDate instanceof Date) dt = DateTime.fromJSDate(deletionDate, { zone: 'Asia/Manila' });
-    else if (typeof deletionDate === 'string') {
-        dt = deletionDate.endsWith('Z')
-            ? DateTime.fromISO(deletionDate, { zone: 'utc' }).setZone('Asia/Manila')
-            : DateTime.fromISO(deletionDate, { zone: 'Asia/Manila' });
-    } else return null;
+    const dt = deletionDate instanceof Date
+        ? DateTime.fromJSDate(deletionDate, { zone: 'Asia/Manila' })
+        : DateTime.fromISO(deletionDate, { zone: 'Asia/Manila' });
 
     if (!dt.isValid) return null;
     return dt.set({ hour: 10, minute: 0, second: 0, millisecond: 0 });
@@ -20,29 +18,27 @@ const getDeletionTime = (deletionDate) => {
 export const deleteEmployeeNow = async (pool, employee) => {
     if (['Employed', 'Probationary'].includes(employee.status)) return;
 
-    const deletionDate = employee.effective_deletion_date || employee.end_of_contract;
-    const deletionTime = getDeletionTime(deletionDate);
-    if (!deletionTime) return;
-
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
         const statusToArchive = employee.effective_deletion_date ? employee.status : "End of Contract";
-          const { rowCount } = await client.query(`
+
+        // Update full-time contracts end_of_contract
+        const { rowCount } = await client.query(`
             UPDATE employee_contracts
             SET end_of_contract = NOW()
             WHERE employee_id = $1
             AND (end_of_contract IS NULL OR end_of_contract > NOW())
             AND LOWER(contract_type) = 'full-time'
         `, [employee.employee_id]);
-        console.log(`✅ Updated ${rowCount} full-time contracts with end_of_contract = NOW() for employee ${employee.employee_id}`);
+        console.log(`✅ Updated ${rowCount} full-time contracts for employee ${employee.employee_id}`);
 
         // --- Archive employees ---
         const { rows: archivedEmployees } = await client.query(`
             INSERT INTO employees_archive
             (employee_id, fullname, nickname, email, position, employment_type, status, gender, contact,
-            birthday, marital_status, address, sss_number, pagibig, philhealth, current_status)
+             birthday, marital_status, address, sss_number, pagibig, philhealth, current_status)
             SELECT employee_id, fullname, nickname, email, position, employment_type, $2, gender, contact,
                    birthday, marital_status, address, sss_number, pagibig, philhealth, $2
             FROM employees
@@ -50,7 +46,8 @@ export const deleteEmployeeNow = async (pool, employee) => {
             ON CONFLICT (employee_id) DO NOTHING
             RETURNING *
         `, [employee.employee_id, statusToArchive]);
-        if (archivedEmployees.length > 0) {
+
+        if (archivedEmployees.length) {
             try { await syncRow('employees_archive', archivedEmployees[0], 'employee_id'); }
             catch (err) { console.error(`Supabase sync failed for employees_archive ${employee.employee_id}:`, err); }
         }
@@ -156,17 +153,14 @@ export const deleteEmployeeNow = async (pool, employee) => {
         for (const t of tablesToDelete) await client.query(`DELETE FROM ${t} WHERE employee_id = $1`, [employee.employee_id]);
 
         await client.query('COMMIT');
-
         console.log(`✅ Employee ${employee.employee_id} archived and deleted successfully.`);
 
         if (employee.email) {
-            try {
-                await sendEmployeeDeactivatedEmail(employee.email, employee.fullname);
-            } catch (err) {
-                console.error(`❌ Failed to send deactivation email to ${employee.email}:`, err);
-            }
+            try { await sendEmployeeDeactivatedEmail(employee.email, employee.fullname); }
+            catch (err) { console.error(`❌ Failed to send deactivation email to ${employee.email}:`, err); }
         }
-        // --- Delete from Supabase ---
+
+        // Delete from Supabase
         const supabaseTables = [
             'employees',
             'employee_dependents',
@@ -192,26 +186,63 @@ export const deleteEmployeeNow = async (pool, employee) => {
 export const scheduleEmployeeDeletion = async (pool, employee) => {
     if (['Employed', 'Probationary'].includes(employee.status)) return;
 
-    const deletionDate = employee.effective_deletion_date || employee.end_of_contract;
-    const deletionTime = getDeletionTime(deletionDate);
+    const deletionTime = getDeletionTime(employee.effective_deletion_date || employee.end_of_contract);
     if (!deletionTime) return;
 
     const jsDate = deletionTime.toJSDate();
+
+    const client = await pool.connect();
+    try {
+        // Upsert into schedule table
+        await client.query(`
+            INSERT INTO employee_deletion_schedule (employee_id, deletion_date, status)
+            VALUES ($1, $2, 'Scheduled')
+            ON CONFLICT (employee_id) 
+            DO UPDATE SET deletion_date = EXCLUDED.deletion_date, status = 'Scheduled', updated_at = NOW()
+        `, [employee.employee_id, jsDate]);
+    } finally {
+        client.release();
+    }
+
     if (deletionTime <= DateTime.now().setZone('Asia/Manila')) {
         await deleteEmployeeNow(pool, employee);
-    } else {
-        schedule.scheduleJob(jsDate, async () => {
+        return;
+    }
+
+    if (scheduledJobs.has(employee.employee_id)) return;
+
+    const job = schedule.scheduleJob(jsDate, async () => {
+        try {
             await deleteEmployeeNow(pool, employee);
-            if (employee.email) {
-                try {
-                    await sendDeactivationScheduledEmail(employee.email, employee.fullname, jsDate);
-                } catch (err) {
-                    console.error(`❌ Failed to send scheduled deactivation email to ${employee.email}:`, err);
-                }
+
+            // Update schedule table after deletion
+            const client = await pool.connect();
+            try {
+                await client.query(`
+                    UPDATE employee_deletion_schedule
+                    SET status = 'Deleted', updated_at = NOW()
+                    WHERE employee_id = $1
+                `, [employee.employee_id]);
+            } finally {
+                client.release();
             }
-        });
+
+        } finally {
+            scheduledJobs.delete(employee.employee_id);
+        }
+    });
+
+    scheduledJobs.set(employee.employee_id, job);
+
+    if (employee.email) {
+        try {
+            await sendDeactivationScheduledEmail(employee.email, employee.fullname, jsDate);
+        } catch (err) {
+            console.error(`❌ Failed to send scheduled deactivation email to ${employee.email}:`, err);
+        }
     }
 };
+
 
 export const startEmployeeDeletionTimer = (pool) => {
     schedule.scheduleJob('*/1 * * * *', async () => {
@@ -225,8 +256,8 @@ export const startEmployeeDeletionTimer = (pool) => {
                     FROM employee_contracts
                     ORDER BY employee_id, updated_at DESC
                 ) c ON e.employee_id = c.employee_id
-                WHERE ( (e.effective_deletion_date IS NOT NULL AND e.effective_deletion_date <= CURRENT_DATE)
-                    OR (c.end_of_contract IS NOT NULL AND c.end_of_contract <= CURRENT_DATE) )
+                WHERE ((e.effective_deletion_date IS NOT NULL AND e.effective_deletion_date <= CURRENT_DATE)
+                    OR (c.end_of_contract IS NOT NULL AND c.end_of_contract <= CURRENT_DATE))
                   AND e.status NOT IN ('Employed', 'Probationary')
             `);
             for (const emp of employees) await deleteEmployeeNow(pool, emp);
@@ -250,7 +281,7 @@ export const initEmployeeDeletionSchedules = async (pool) => {
             WHERE (e.effective_deletion_date > CURRENT_DATE OR c.end_of_contract > CURRENT_DATE)
               AND e.status NOT IN ('Employed', 'Probationary')
         `);
-        
+
         for (const emp of futureEmployees) scheduleEmployeeDeletion(pool, emp);
     } finally {
         client.release();

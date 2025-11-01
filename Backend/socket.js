@@ -10,6 +10,12 @@ export function initSocket(server) {
   io.on("connection", (socket) => {
     console.log("A client connected:", socket.id);
 
+    // Listen for employee to join their own room
+    socket.on("joinRoom", (employeeId) => {
+      socket.join(employeeId);
+      console.log(`Employee ${employeeId} joined room ${employeeId}`);
+    });
+
     socket.on("disconnect", () => {
       console.log("Client disconnected:", socket.id);
     });
@@ -17,6 +23,7 @@ export function initSocket(server) {
 
   return io;
 }
+
 
 // export io instance to use in routes
 export function getIo() {

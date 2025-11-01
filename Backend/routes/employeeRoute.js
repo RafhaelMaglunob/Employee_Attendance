@@ -9,6 +9,6 @@ export async function employeeRoutes(fastify, options) {
     fastify.post("/employees", controller.addEmployee);
     fastify.put("/employees/:id", controller.updateEmployee);
     fastify.patch("/employees/:id", controller.deleteEmployee);
-    fastify.get("/employees/requests", controller.getAllEmployeeRequest);
+    fastify.get("/employees/requests", controller.getAllEmployeeRequests);
     fastify.put("/employee/requests/:requestId", controller.updateEmployeeRequest);
 }

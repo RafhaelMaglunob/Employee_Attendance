@@ -18,8 +18,6 @@ export function Form({
 }) {
 	const isPhoneField = (name) => phoneField?.includes(name);
 
-	const withoutPlus63 = (val) =>
-		typeof val === "string" ? val.replace(/^\+63\s*/, "") : "";
 
 	const getInputClass = (disabled) =>
 		`w-full border rounded-lg px-3 h-9 focus:outline-none ${
@@ -99,26 +97,31 @@ export function Form({
 														)}
 													</select>
 												) : isPhoneField(subField.name) ? (
-													<div className="relative">
-														<span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-700 select-none">
-															+63
-														</span>
-														<input
-															type={subField.type || "text"}
-															name={subField.name}
-															disabled={disabled}
-															placeholder={subField.placeholder || "XXX XXX XXXX"}
-															value={withoutPlus63(formValues[subField.name])}
-															required={subField.required ?? true}
-															onChange={(e) => {
-																let v = e.target.value.replace(/\D/g, ""); 
-																v = v.replace(/^0+/, ""); 
-																if (v.length > 10) v = v.slice(0, 10); 
-																onFieldChange?.(subField.name, v);
-															}}
-															className={`${getInputClass(disabled)} pl-14`}
-														/>
-													</div>
+													<input
+														type={subField.type || "text"}
+														name={subField.name}
+														disabled={disabled}
+														placeholder={subField.placeholder || "09XX XXX XXXX"}
+														value={formValues[subField.name] ?? ""}
+														required={subField.required ?? true}
+														onChange={(e) => {
+															let v = e.target.value.replace(/\D/g, ""); // only digits
+															if (v.length > 10) v = v.slice(0, 10);    // max 10 digits
+
+															// ensure it starts with 09
+															if (!v.startsWith("09")) {
+																v = "09" + v.slice(2); // keep first two digits as 09
+															}
+
+															// format as 09XX XXX XXXX
+															let formatted = v.slice(0, 4);
+															if (v.length > 4) formatted += " " + v.slice(4, 7);
+															if (v.length > 7) formatted += " " + v.slice(7, 10);
+
+															onFieldChange?.(subField.name, formatted);
+														}}
+														className={getInputClass(disabled)}
+													/>
 												) : (
 													<input
 														type={subField.type || "text"}
@@ -176,26 +179,31 @@ export function Form({
 									)}
 								</select>
 							) : isPhoneField(field.name) ? (
-								<div className="relative">
-									<span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-700 select-none">
-										+63
-									</span>
-									<input
-										type={field.type || "text"}
-										name={field.name}
-										disabled={disabled}
-										placeholder={field.placeholder || "XXX XXX XXXX"}
-										value={withoutPlus63(formValues[field.name])}
-										required={field.required ?? true}
-										onChange={(e) => {
-											let v = e.target.value.replace(/\D/g, ""); 
-											v = v.replace(/^0+/, ""); 
-											if (v.length > 10) v = v.slice(0, 10); 
-											onFieldChange?.(field.name, v);
-										}}	
-										className={`${getInputClass(disabled)} pl-14`}
-									/>
-								</div>
+								<input
+									type={field.type || "text"}
+									name={field.name}
+									disabled={disabled}
+									placeholder={field.placeholder || "09XX XXX XXXX"}
+									value={formValues[field.name] ?? ""}
+									required={field.required ?? true}
+									onChange={(e) => {
+										let v = e.target.value.replace(/\D/g, ""); // remove non-digits
+										if (v.length > 10) v = v.slice(0, 10);    // max 10 digits
+
+										// ensure starts with 09
+										if (!v.startsWith("09")) {
+											v = "09" + v.slice(2);
+										}
+
+										// format as 09XX XXX XXXX
+										let formatted = v.slice(0, 4);
+										if (v.length > 4) formatted += " " + v.slice(4, 7);
+										if (v.length > 7) formatted += " " + v.slice(7, 10);
+
+										onFieldChange?.(field.name, formatted);
+									}}
+									className={getInputClass(disabled)}
+								/>
 							) : (
 								<input
 									type={field.type || "text"}
@@ -225,6 +233,7 @@ export function Form({
 						{errorText}
 					</div>
 				)}
+
 
 				{/* Footer Buttons */}
 				<div className="col-span-1 md:col-span-2 flex justify-end gap-2 pt-4">

@@ -103,7 +103,7 @@ function Approval() {
         </div>
       )
     },
-    { key: "date", title: "Date", render: row => row.start_date || "-" },
+    { key: "date", title: "Date", render: row => row.date || "-" },
     { key: "hours", title: "Hours", render: row => `${row.hours || 0} hours` },
     {
       key: "status",

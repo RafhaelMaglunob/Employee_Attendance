@@ -30,11 +30,10 @@ Backend Installation
     npm install dotenv
     npm install googleapis pg node-cron
     npm install googleapis pg node-schedule
-    npm install bcrypt
     npm install nodemailer bcryptjs crypto
     npm install jsonwebtoken
     npm install luxon
     npm install @supabase/supabase-js
     npm install socket.io
     npm install @fastify/jwt
-
+    npm i argon2

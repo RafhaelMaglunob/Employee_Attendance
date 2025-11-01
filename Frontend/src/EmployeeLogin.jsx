@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from './component/ui/card';
 import Background from './component/ui/Background';
 import { useNavigate } from 'react-router-dom';
@@ -9,6 +9,13 @@ function EmployeeLogin() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    
+    useEffect(() => {
+        const token = Cookies.get("employee_token");
+        if (token) {
+            navigate("/employee/dashboard", { replace: true });
+        }
+    }, [navigate]);
 
     const handleLogin = async () => {
         const res = await fetch("http://localhost:3001/api/employee-login", {

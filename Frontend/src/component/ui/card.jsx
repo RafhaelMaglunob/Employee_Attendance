@@ -36,6 +36,7 @@ export function Card({
   hasButton = false,
   width = "full",
   className = "",
+  onClick,
 }) {
   return (
     <div
@@ -44,8 +45,10 @@ export function Card({
         width === "full" ? "w-full" : `w-${width}`,
         `flex flex-col font-inter`,
         `rounded-${radius}`,
-        className
+        className,
+        onClick ? "cursor-pointer" : ""
        )}
+       onClick={hasButton ? undefined : onClick}
     >
       {/* Header */}
       {(title || header) && (
@@ -65,7 +68,9 @@ export function Card({
       {/* Footer */}
       {hasButton && (
         <div className="px-4 py-3 border-t">
-          <button className="w-full bg-black text-white py-2 rounded-md text-xs hover:bg-gray-800 transition">
+          <button 
+            onClick={onClick}
+            className="w-full bg-black text-white py-2 rounded-md text-xs hover:bg-gray-800 transition">
             {footer || "Click Me"}
           </button>
         </div>

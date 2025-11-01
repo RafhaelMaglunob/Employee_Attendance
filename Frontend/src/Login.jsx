@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card } from './component/ui/card'
 import Background from './component/ui/Background'
 import { Button } from './component/ui/button'
@@ -20,7 +20,13 @@ function Login() {
             </Button>
         </div>
     )
-
+    
+    useEffect(() => {
+        const token = Cookies.get("auth_token");
+        if (token) {
+            navigate("/dashboard", { replace: true });
+        }
+    }, [navigate]);
     const handleLogin = async () => {
         const res = await fetch("http://localhost:3001/api/admin/login", {
             method: "POST",

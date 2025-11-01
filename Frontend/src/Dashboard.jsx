@@ -1,6 +1,7 @@
 import React from 'react'
 import { Card } from './component/ui/card'
 import { Table } from './component/data/table'
+import { useNavigate } from 'react-router-dom';
 
 const columns = [
   { key: "type", title: "Type" },
@@ -18,6 +19,7 @@ const data = [
 
 
 function Dashboard() {
+    const navigate = useNavigate();
     return (
         <div className="pb-10">
             <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
@@ -60,6 +62,7 @@ function Dashboard() {
                         hasButton
                         footer="View All Requests"
                         className="flex-1"
+                        onClick={() => navigate("/approval")}
                     >
                         <div className="flex flex-col gap-3 mt-1">
                             <div className="flex items-center gap-4">
@@ -86,6 +89,7 @@ function Dashboard() {
                         hasButton
                         footer="View all Schedules"
                         className="flex-1"
+                        onClick={() => navigate("/scheduling")}
                     >
                         <div className="flex flex-col flex-1 mt-1 gap-3">
                             <div className="flex justify-between items-center border-b border-black">

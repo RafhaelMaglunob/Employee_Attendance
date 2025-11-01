@@ -111,12 +111,15 @@ CREATE TABLE employee_requests (
     status VARCHAR(20) DEFAULT 'pending' 
         CHECK (status IN ('pending', 'approved', 'rejected', 'partial')),
     admin_comment TEXT,
-    shift VARCHAR(20),
-    return_date DATE,
     remarks TEXT,
     reason TEXT,
     link TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE employee_notifications (
+    employee_id VARCHAR PRIMARY KEY REFERENCES employees(employee_id),
+    count INT DEFAULT 0
 );
 
 

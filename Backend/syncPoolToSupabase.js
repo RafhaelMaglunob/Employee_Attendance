@@ -3,23 +3,28 @@ import { pool } from './db/pool.js';
 
 const tables = [
   'employee_registry',
-  'employee_schedule',
   'employees',
-  'employee_requests',
-  'employee_dependents',
-  'employee_documents',
-  'employee_contracts',
   'employees_archive',
+  'employee_contracts',
+  'employee_contracts_archive',
+  'employee_documents',
+  'employee_documents_archive',
+  'employee_dependents',
+  'employee_dependents_archive',
+  'leave_requests',
+  'leave_requests_archive',
+  'overtime_requests',
+  'overtime_requests_archive',
+  'employee_notifications',
+  'employee_schedule',
   'users',
   'users_archive',
-  'employee_dependents_archive',
-  'employee_documents_archive',
-  'employee_contracts_archive',
-  'incident_reports',
-  'incident_reports_archive',       // added archive
   'audit_logs',
+  'incident_reports',
+  'incident_reports_archive',
   'employee_attendance',
-  'employee_attendance_archive',    // added archive
+  'employee_attendance_archive',
+  'employee_deletion_schedule',
 ];
 
 function getKeyColumn(table) {
@@ -36,7 +41,11 @@ function getKeyColumn(table) {
     case 'employee_documents':
     case 'employee_documents_archive':
       return 'document_id';
-    case 'employee_requests':
+    case 'leave_requests':
+    case 'leave_requests_archive':
+      return 'request_id';
+    case 'overtime_requests':
+    case 'overtime_requests_archive':
       return 'request_id';
     case 'users':
     case 'users_archive':
@@ -46,11 +55,17 @@ function getKeyColumn(table) {
     case 'audit_logs':
       return 'log_id';
     case 'incident_reports':
-    case 'incident_reports_archive':   // added archive
+    case 'incident_reports_archive':
       return 'incident_id';
     case 'employee_attendance':
-    case 'employee_attendance_archive': // added archive
+    case 'employee_attendance_archive':
       return 'attendance_id';
+    case 'employee_notifications':
+      return 'employee_id';
+    case 'employee_deletion_schedule':
+      return 'schedule_id';
+    case 'employee_registry':
+      return 'id';
     default:
       return 'id';
   }

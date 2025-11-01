@@ -1,14 +1,25 @@
-import React from "react";
+import React, {useState} from "react";
 import { useNavigate } from "react-router-dom";
+
+import Cookies from "js-cookie";
+import ChangePasswordModal from "./component/modals/ChangePasswordModal";
+
+import ConfirmModal from "./component/modals/ConfirmModal";
+import MessageModal from "./component/modals/MessageModal";
 
 function EmployeeSetting() {
   const navigate = useNavigate();
+  
+  const [showChangePassword, setShowChangePassword] = useState(false);
+	const [confirmOpen, setConfirmOpen] = useState(false);
+	const [messageOpen, setMessageOpen] = useState(false);
+	const [messageText, setMessageText] = useState("");
 
   const settings = [
     {
       label: "Change Password",
       icon: "../img/ProfileLock.png",
-      action: () => navigate("/employee/change-password")
+      action: () => setShowChangePassword(true)
     },
     {
       label: "Notifications",
@@ -20,6 +31,56 @@ function EmployeeSetting() {
       action: () => navigate("/employee/certificate")
     }
   ];
+
+  const handleChangePasswordSubmit = async ({ oldPassword, newPassword }) => {
+      const token = Cookies.get("employee_token");
+      if (!token) {
+        handleLogout(); 
+        return;
+      }
+  
+      setConfirmOpen(true);
+  
+      const confirm = await new Promise((resolve) => {
+        const interval = setInterval(() => {
+        if (window.__confirmResult !== undefined) {
+          clearInterval(interval);
+          const result = window.__confirmResult;
+          window.__confirmResult = undefined;
+          resolve(result);
+        }
+        }, 100);
+      });
+  
+      if (!confirm) return;
+  
+      try {
+        console.log("Token being sent:", token); 
+        const res = await fetch("http://localhost:3001/api/employee/change-password", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ oldPassword, newPassword }),
+        });
+  
+        const data = await res.json();
+  
+        if (data.success) {
+        setMessageText("✅ Your password has been successfully changed.");
+        setMessageOpen(true);
+        setShowChangePassword(false);
+        localStorage.removeItem("isFirstLogin");
+        } else {
+        setMessageText(data.error || "❌ Failed to change password.");
+        setMessageOpen(true);
+        }
+      } catch (err) {
+        setMessageText("⚠️ Server error. Please try again.");
+        setMessageOpen(true);
+      }
+    };
 
   return (
     <div className="font-inter text-black flex flex-col">
@@ -63,6 +124,31 @@ function EmployeeSetting() {
           <p className="flex items-center text-center justify-center align-center text-sm opacity-70 py-4"> The Crunch BS - Version 1.0 </p>
         </div>
       </div>
+      {showChangePassword && (
+        <ChangePasswordModal
+          isOpen={showChangePassword}
+          onClose={() => {
+          setShowChangePassword(false);
+          localStorage.removeItem("isFirstLogin");
+          }}
+          onSubmit={handleChangePasswordSubmit} // ✅ Pass function
+        />
+      )}
+      
+      <ConfirmModal
+        isOpen={confirmOpen}
+        title="Confirm Password Change"
+        message="Are you sure you want to change your password?"
+        onConfirm={() => { window.__confirmResult = true; setConfirmOpen(false); }}
+        onCancel={() => { window.__confirmResult = false; setConfirmOpen(false); }}
+      />
+
+      {/* Result Message */}
+      <MessageModal
+        isOpen={messageOpen}
+        message={messageText}
+        onClose={() => setMessageOpen(false)}
+      />
     </div>
   );
 }

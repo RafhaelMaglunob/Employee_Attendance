@@ -15,7 +15,7 @@ import {
 } from "date-fns";
 
 function EmployeeDashboard() {
-  const employeeId = localStorage.getItem("employee-id");
+  const employeeId = localStorage.getItem("employeeId");
   const [currentWeek, setCurrentWeek] = useState(new Date());
 
   // Weekly Summary data

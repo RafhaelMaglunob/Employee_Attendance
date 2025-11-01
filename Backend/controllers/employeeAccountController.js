@@ -1,15 +1,13 @@
-import bcrypt from 'bcrypt';
+import argon2 from "argon2";
 import jwt from 'jsonwebtoken';
 import { syncRow, deleteRow } from '../utils/syncToSupabase.js';
 
-const SECRET_KEY = "your_secret_here";
-
 const TIME_RANGES = {
-    Opening: { start_time: '07:00:00', end_time: '13:00:00' },
-    Closing: { start_time: '15:00:00', end_time: '20:00:00' },
+    Opening: { start_time: '09:00:00', end_time: '14:00:00' },
+    Closing: { start_time: '18:00:00', end_time: '23:00:00' },
 };
 
-export function employeeAccountController(pool) {
+export function employeeAccountController(pool, io) {
 
     const getLoginEmployeeAccount = async (req, reply) => {
         const { email, password } = req.body;
@@ -24,7 +22,7 @@ export function employeeAccountController(pool) {
             if (!result.rows.length) return reply.status(404).send({ error: 'Email does not exist or role not allowed.' });
 
             const user = result.rows[0];
-            const isMatch = await bcrypt.compare(password, user.password);
+            const isMatch = await argon2.verify(user.password, password);
             if (!isMatch) return reply.status(401).send({ error: 'Incorrect email or password.' });
 
             delete user.password;
@@ -64,13 +62,13 @@ export function employeeAccountController(pool) {
             const user = result.rows[0];
 
             // Check old password
-            const isMatch = await bcrypt.compare(oldPassword, user.password);
+            const isMatch = await argon2.verify(user.password, oldPassword);
             if (!isMatch) {
                 return reply.status(401).send({ error: "Old password is incorrect." });
             }
 
             // Hash new password
-            const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+            const hashedNewPassword = await argon2.hash(newPassword, 10);
 
             // Update password in DB
             await pool.query(
@@ -145,7 +143,7 @@ export function employeeAccountController(pool) {
             for (const t of timesToAdd) {
                 const { start_time, end_time } = TIME_RANGES[t];
                 const { rows } = await pool.query(
-                    `INSERT INTO employee_schedule (employee_id, work_date, start_time, end_time) VALUES ($1, $2, $3, $4) RETURNING *`,
+                    `INSERT INTO employee_schedule (employee_id, work_date, start_time, end_time, status) VALUES ($1, $2, $3, $4, 'pending') RETURNING *`,
                     [employee_id, date, start_time, end_time]
                 );
 
@@ -185,111 +183,239 @@ export function employeeAccountController(pool) {
         }
     };
 
+    const getNotificationCount = async (req, reply) => {
+        const { id } = req.params; // employeeId
 
-    const sendRequest = async (req, reply, io) => {
+        try {
+            const res = await pool.query(
+                "SELECT count FROM employee_notifications WHERE employee_id = $1",
+                [id]
+            );
+
+            if (res.rows.length === 0) {
+                // If no record exists, return 0
+                return reply.send({ success: true, count: 0 });
+            }
+
+            return reply.send({ success: true, count: res.rows[0].count });
+        } catch (err) {
+            console.error("Error fetching notification count:", err);
+            return reply.status(500).send({ success: false, message: "Failed to get notification count" });
+        }
+    };
+
+    const resetNotificationCount = async (req, reply) => {
+        const { id } = req.params; // employeeId
+
+        try {
+            // Update count to 0 and return the updated row
+            const res = await pool.query(
+                "UPDATE employee_notifications SET count = 0 WHERE employee_id = $1 RETURNING *",
+                [id]
+            );
+
+            // If no record exists for this employee, respond with count 0
+            if (res.rowCount === 0) {
+                return reply.send({ success: true, count: 0 });
+            }
+
+            return reply.send({ success: true, count: res.rows[0].count });
+        } catch (err) {
+            console.error("Error resetting notification count:", err);
+            return reply.status(500).send({ success: false, message: "Failed to reset notification count" });
+        }
+    };
+
+
+    const sendRequest = async (req, reply) => {
         try {
             const { id } = req.params;
             const { request_type, type, date, startDate, endDate, reason, link, hours } = req.body;
-            console.log(hours);
-            let days = null;
-            let finalStartDate = null;
-            let finalEndDate = null;
-            let finalDate = null;
 
-            // Leave → use startDate/endDate and calculate work days
-            if (request_type === "leave") {
-                finalStartDate = startDate;
-                finalEndDate = endDate;
-                const scheduleRes = await pool.query(
-                    `SELECT COUNT(DISTINCT work_date) AS work_days
-                    FROM employee_schedule 
-                    WHERE employee_id = $1 
-                    AND work_date BETWEEN $2 AND $3`,
-                    [id, startDate, endDate]
-                );
-                days = scheduleRes.rows[0].work_days;
-            } else  {
-                finalDate = date;
-                days = 0;         // explicitly 0
-                finalStartDate = null;
-                finalEndDate = null;
-            }
+            if (!request_type) return reply.code(400).send({ success: false, message: "Request type required" });
 
-            const { rows } = await pool.query(
-            `INSERT INTO employee_requests (
-                employee_id,
-                request_type,
-                type,
-                days,
-                date,
-                start_date,
-                end_date,
-                reason,
-                link,
-                hours,
-                status
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending')
-            RETURNING *`,
-            [
-                id,
-                request_type,
-                type,
-                days,
-                finalDate,
-                finalStartDate,
-                finalEndDate,
-                reason,
-                link,
-                hours
-            ]
+            // Fetch all existing requests for this employee
+            const { rows: existingLeaves } = await pool.query(
+                `SELECT request_id, start_date, end_date, type, status
+                FROM leave_requests
+                WHERE employee_id = $1`,
+                [id]
             );
 
-            await syncRow('employee_requests', rows[0], 'request_id');
-            io?.emit("employeeRequestCreated", rows[0]);
+            const { rows: existingOvertimes } = await pool.query(
+                `SELECT request_id, date, type, status
+                FROM overtime_requests
+                WHERE employee_id = $1`,
+                [id]
+            );
 
-            reply.code(201).send({ success: true, message: "Request submitted", data: rows[0] });
+            const { rows: existingOffsets } = await pool.query(
+                `SELECT request_id, date, type, status
+                FROM offset_requests
+                WHERE employee_id = $1`,
+                [id]
+            );
+
+            // Combine all requests into one array
+            const allRequests = [
+                ...existingLeaves.map(r => ({ ...r, request_type: "leave", start: r.start_date, end: r.end_date })),
+                ...existingOvertimes.map(r => ({ ...r, request_type: "overtime", start: r.date, end: r.date })),
+                ...existingOffsets.map(r => ({ ...r, request_type: "off-set", start: r.date, end: r.date }))
+            ];
+
+            // Check conflicts
+            const conflicts = allRequests.filter(r => {
+                if (request_type === "leave") {
+                    const reqStart = new Date(startDate);
+                    const reqEnd = new Date(endDate);
+                    const existStart = new Date(r.start);
+                    const existEnd = new Date(r.end);
+                    return reqStart <= existEnd && reqEnd >= existStart; // overlap check
+                } else {
+                    const reqDate = new Date(date);
+                    const existStart = new Date(r.start);
+                    const existEnd = new Date(r.end);
+                    return reqDate >= existStart && reqDate <= existEnd; // single day overlap
+                }
+            });
+
+            // Handle conflicts
+            if (conflicts.length > 0) {
+                // Emergency Leave special case
+                if (request_type === "leave" && type.toLowerCase() === "emergency leave") {
+                    // Only return pending requests for deletion confirmation
+                    const pendingConflicts = conflicts.filter(r => r.status.toLowerCase() === "pending");
+                    return reply.code(409).send({
+                        success: false,
+                        message: `You have overlapping requests on these dates:`,
+                        conflicts: pendingConflicts
+                    });
+                } else {
+                    const conflictDates = conflicts.map(r => {
+                        if (r.request_type === "leave") {
+                            return `${r.start.toISOString().split("T")[0]} - ${r.end.toISOString().split("T")[0]}`;
+                        } else {
+                            return r.start.toISOString().split("T")[0];
+                        }
+                    });
+                    return reply.code(409).send({
+                        success: false,
+                        message: `You already have requests on these dates: ${conflictDates.join(", ")}`
+                    });
+                }
+            }
+
+            // Proceed with insertion if no conflicts or after deleting pending conflicts
+            let insertedRow;
+            let table;
+
+            if (request_type === "leave") {
+                table = "leave_requests";
+
+                const { rows: scheduleRes } = await pool.query(
+                    `SELECT COUNT(DISTINCT work_date) AS work_days
+                    FROM employee_schedule 
+                    WHERE employee_id = $1 AND work_date BETWEEN $2 AND $3`,
+                    [id, startDate, endDate]
+                );
+                const days = scheduleRes[0].work_days;
+
+                const { rows } = await pool.query(
+                    `INSERT INTO leave_requests
+                        (employee_id, type, days, start_date, end_date, reason, attach_link)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7)
+                    RETURNING *`,
+                    [id, type, days, startDate, endDate, reason, link]
+                );
+                insertedRow = rows[0];
+
+            } else if (request_type === "overtime") {
+                table = "overtime_requests";
+                const { rows } = await pool.query(
+                    `INSERT INTO overtime_requests
+                        (employee_id, type, date, hours, reason, attach_link)
+                    VALUES ($1,$2,$3,$4,$5,$6)
+                    RETURNING *`,
+                    [id, type, date, hours, reason, link]
+                );
+                insertedRow = rows[0];
+
+            } else if (request_type === "off-set") {
+                table = "offset_requests";
+                const { rows } = await pool.query(
+                    `INSERT INTO offset_requests
+                        (employee_id, type, date, hours, reason, attach_link)
+                    VALUES ($1,$2,$3,$4,$5,$6)
+                    RETURNING *`,
+                    [id, type, date, hours, reason, link]
+                );
+                insertedRow = rows[0];
+            }
+
+            // Sync to Supabase
+            if (insertedRow) {
+                try {
+                    await syncRow(table, insertedRow, "request_id");
+                } catch (err) {
+                    console.warn("syncRow warning:", err?.message || err);
+                }
+            }
+
+            // Update notification
+            await pool.query(
+                `INSERT INTO employee_notifications (employee_id, count)
+                VALUES ($1, 1)
+                ON CONFLICT (employee_id) DO UPDATE SET count = employee_notifications.count + 1`,
+                [id]
+            );
+
+            // Emit WebSocket event
+            if (io) io.to(id).emit(`${request_type}RequestCreated`, insertedRow);
+
+            return reply.code(201).send({ success: true, message: "Request submitted", data: insertedRow });
+
         } catch (err) {
             console.error("Error submitting request:", err);
-            reply.code(500).send({ success: false, message: "Error submitting request" });
+            return reply.code(500).send({ success: false, message: "Error submitting request" });
         }
     };
 
 
     const deleteRequest = async (req, reply) => {
-        const { requestId } = req.params;
-        try {
-            if (isNaN(requestId)) return reply.code(400).send({ success: false, message: "Invalid request ID" });
+        const { type, requestId } = req.params; // type = "leave" or "overtime"
 
-            // Delete from local DB
+        if (!["leave", "overtime"].includes(type)) return reply.code(400).send({ success: false, message: "Invalid type" });
+
+        const table = type === "leave" ? "leave_requests" : "overtime_requests";
+
+        try {
             const result = await pool.query(
-                "DELETE FROM employee_requests WHERE request_id = $1 RETURNING *",
+                `DELETE FROM ${table} WHERE request_id = $1 RETURNING *`,
                 [requestId]
             );
 
-            if (result.rowCount === 0) {
-                return reply.code(404).send({ success: false, message: "Request not found" });
-            }
-
-            // Delete from Supabase
-            await deleteRow('employee_requests', 'request_id', result.rows[0].request_id);
+            if (result.rowCount === 0) return reply.code(404).send({ success: false, message: "Request not found" });
 
             reply.send({ success: true, message: "Request cancelled" });
+
         } catch (err) {
             console.error("Delete request error:", err);
             reply.code(500).send({ success: false, message: "Failed to cancel request" });
         }
     };
 
-
-
     const getRequests = async (req, reply) => {
         const { id } = req.params;
         const { type } = req.query;
-        const reqType = type?.toLowerCase();
+
+        if (!type || !["leave", "overtime", "off-set"].includes(type)) return reply.code(400).send({ success: false, message: "Invalid request type" });
+
+        const table = type === "leave" ? "leave_requests" : type === "overtime" ? "overtime_requests" : "offset_requests";
+
         try {
             const { rows } = await pool.query(
-                "SELECT * FROM employee_requests WHERE employee_id = $1 AND request_type = $2  ORDER BY created_at DESC LIMIT 10",
-                [id, reqType]
+                `SELECT * FROM ${table} WHERE employee_id = $1 ORDER BY created_at DESC LIMIT 10`,
+                [id]
             );
             reply.send({ success: true, data: rows });
         } catch (err) {
@@ -297,6 +423,7 @@ export function employeeAccountController(pool) {
             reply.code(500).send({ success: false, message: "Error fetching requests" });
         }
     };
+
 
     const handleRequestAction = async (req, reply) => {
         const io = req.server.io; // socket.io instance
@@ -348,6 +475,8 @@ export function employeeAccountController(pool) {
     return {
         getLoginEmployeeAccount,
         changeEmployeePassword,
+        getNotificationCount,
+        resetNotificationCount,
         getEmployeeSchedule,
         saveAvailability,
         sendRequest,

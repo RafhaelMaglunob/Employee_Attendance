@@ -12,6 +12,8 @@ export function employeeAccountRoutes(fastify, options){
     fastify.post("/employee/request/:id", controller.sendRequest);
     fastify.delete("/employee/request/:requestId", controller.deleteRequest);
     fastify.put("/employee/requests/:requestId/action", controller.handleRequestAction);
+    fastify.get("/employee/notification/:id", controller.getNotificationCount);
+    fastify.put("/employee/notification/:id", controller.resetNotificationCount);
     fastify.get("/employee/requests/:id", controller.getRequests);
     fastify.get("/employee/leave/:id", controller.getLeaveDays);
 }
