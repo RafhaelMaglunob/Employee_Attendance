@@ -410,8 +410,8 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 
 	return (
 		<ModalContainer title="Add Employee" width="3xl" variant="admin">
-			{excelRows.length > 0 &&
-				<div className="flex justify-between mt-4">
+			{excelRows.length > 0 && (
+				<div className="flex justify-between mt-4 items-center ">
 					<button
 						onClick={handleDeleteCurrent}
 						className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg"
@@ -419,34 +419,60 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 						Delete This Entry
 					</button>
 
-					<div className="flex gap-2">
+					<div className="flex gap-2 items-center">
+						{/* Prev Button */}
 						<button
 							onClick={() => {
-								if (currentExcelIndex > 0) {
-									setCurrentExcelIndex(currentExcelIndex - 1);
-									setFormValues(mapExcelRowToForm(excelRows[currentExcelIndex - 1]));
-								}
+							if (currentExcelIndex > 0) {
+								// Save current edits
+								const updatedRows = [...excelRows];
+								updatedRows[currentExcelIndex] = formValues;
+								setExcelRows(updatedRows);
+
+								const prevIndex = currentExcelIndex - 1;
+								setCurrentExcelIndex(prevIndex);
+								setFormValues(mapExcelRowToForm(updatedRows[prevIndex]));
+							}
 							}}
-							className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded"
+							className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
 							disabled={currentExcelIndex === 0}
 						>
 							Prev
 						</button>
+
+						{/* Current Position */}
+						<span className="px-2">
+							[{currentExcelIndex + 1}]
+						</span>
+
+						{/* Next Button */}
 						<button
 							onClick={() => {
-								if (currentExcelIndex < excelRows.length - 1) {
-									setCurrentExcelIndex(currentExcelIndex + 1);
-									setFormValues(mapExcelRowToForm(excelRows[currentExcelIndex + 1]));
-								}
+							if (currentExcelIndex < excelRows.length - 1) {
+								// Save current edits
+								const updatedRows = [...excelRows];
+								updatedRows[currentExcelIndex] = formValues;
+								setExcelRows(updatedRows);
+
+								const nextIndex = currentExcelIndex + 1;
+								setCurrentExcelIndex(nextIndex);
+								setFormValues(mapExcelRowToForm(updatedRows[nextIndex]));
+							}
 							}}
-							className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded"
+							className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
 							disabled={currentExcelIndex >= excelRows.length - 1}
 						>
 							Next
 						</button>
+
+						{/* Range Label */}
+						<span className="ml-4 text-sm text-gray-600">
+							1 - {excelRows.length}
+						</span>
 					</div>
 				</div>
-			}
+			)}
+
 			<Form
 				fields={fields}
 				formValues={formValues}

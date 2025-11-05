@@ -11,10 +11,8 @@ lerna-debug.log*
 service-account.json
 Backend/service-account.json
 
-# --- Dependencies ---
-node_modules/
-Backend/node_modules/
-
+/Backend/node_modules
+node_modules
 # --- Build output ---
 dist/
 dist-ssr/

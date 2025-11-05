@@ -8,5 +8,4 @@ export async function logRoutes(fastify, options) {
     fastify.get("/total-work-logs", controller.getTotalWorkLogs)
     fastify.get("/work-logs/:id", controller.getSingleWorkLog)
     fastify.get("/employee-pay-periods", controller.getEmployeePayPeriod)
-    fastify.get("/incidents", controller.getIncidentLogs)
 }

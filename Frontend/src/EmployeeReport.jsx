@@ -21,6 +21,7 @@ const leaveFields = [
 
 export default function EmployeeReport() {
   const employeeId = localStorage.getItem("employeeId");
+  const { socket, isConnected } = useSocket();
   const today = new Date().toISOString().split("T")[0];
   
   const tabMap = {
@@ -30,8 +31,6 @@ export default function EmployeeReport() {
   };
 
   const [recentRequests, setRecentRequests] = useState({});
-  const { socket, isConnected } = useSocket();
-
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, message: "", onConfirm: null });
   const [messageModal, setMessageModal] = useState({ isOpen: false, title: "", message: "" });
   
@@ -56,32 +55,86 @@ export default function EmployeeReport() {
       return;
     }
 
-    console.log("🔌 Setting up socket listeners");
+    console.log("🔌 Setting up real-time socket listeners");
 
     const handleUpdate = (updatedReq) => {
-      console.log("📨 Received update:", updatedReq);
+      console.log("📨 Real-time update received:", updatedReq);
+      
       setRecentRequests(prev => {
         const type = updatedReq.request_type;
         const list = prev[type] || [];
         const index = list.findIndex(r => r.request_id === updatedReq.request_id);
-        if (index !== -1) list[index] = { ...list[index], ...updatedReq };
-        else list.unshift(updatedReq);
+        
+        if (index !== -1) {
+          // Update existing
+          list[index] = { ...list[index], ...updatedReq };
+        } else {
+          // Add new request at the top
+          list.unshift(updatedReq);
+        }
 
         return { ...prev, [type]: [...list] };
       });
+
+      // Update modal if currently viewing this request
+      setSelectedRequest(current => {
+        if (current?.request_id === updatedReq.request_id) {
+          return { ...current, ...updatedReq };
+        }
+        return current;
+      });
     };
 
+    const handleDelete = (deletedReq) => {
+      console.log("🗑️ Real-time delete received:", deletedReq);
+      
+      setRecentRequests(prev => {
+        const type = deletedReq.request_type;
+        const list = prev[type] || [];
+        const filtered = list.filter(r => r.request_id !== deletedReq.request_id);
+        return { ...prev, [type]: filtered };
+      });
+
+      // Close modal if viewing deleted request
+      if (selectedRequest?.request_id === deletedReq.request_id) {
+        setIsModalOpen(false);
+        setSelectedRequest(null);
+      }
+    };
+
+    // Listen for updates
     socket.on("leaveRequestUpdated", handleUpdate);
     socket.on("overtimeRequestUpdated", handleUpdate);
-    socket.on("off-setRequestUpdated", handleUpdate);
+    socket.on("offsetRequestUpdated", handleUpdate);
+
+    // Listen for deletions
+    socket.on("leaveRequestDeleted", handleDelete);
+    socket.on("overtimeRequestDeleted", handleDelete);
+    socket.on("offsetRequestDeleted", handleDelete);
+
+    // Listen for notifications
+    socket.on("notificationReceived", (data) => {
+      console.log("🔔 New notification:", data);
+      // You can show a toast notification here
+    });
+
+    socket.on("notificationCountUpdated", (data) => {
+      console.log("🔔 Notification count updated:", data.count);
+      // Update notification badge
+    });
 
     return () => {
       console.log("🧹 Cleaning up socket listeners");
       socket.off("leaveRequestUpdated", handleUpdate);
       socket.off("overtimeRequestUpdated", handleUpdate);
-      socket.off("off-setRequestUpdated", handleUpdate);
+      socket.off("offsetRequestUpdated", handleUpdate);
+      socket.off("leaveRequestDeleted", handleDelete);
+      socket.off("overtimeRequestDeleted", handleDelete);
+      socket.off("offsetRequestDeleted", handleDelete);
+      socket.off("notificationReceived");
+      socket.off("notificationCountUpdated");
     };
-  }, [socket, isConnected]);
+  }, [socket, isConnected, selectedRequest]);
 
   useEffect(() => {
     if (didFetchRef .current) return;
@@ -222,7 +275,6 @@ export default function EmployeeReport() {
 
       if (result.success) {
         setFormValues({});
-        await fetchRecentRequests(activeTab, true);
       }
     } catch (err) {
       setMessageModal({ isOpen: true, title: "Error", message: "Failed to submit request" });
@@ -302,7 +354,6 @@ export default function EmployeeReport() {
             message: result.success ? "Request cancelled" : result.message
           });
           if (result.success) {
-            fetchRecentRequests(activeTab, true);
             setIsModalOpen(false);
           }
         } catch (err) {

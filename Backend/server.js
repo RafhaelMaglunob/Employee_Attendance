@@ -1,4 +1,6 @@
-// server.js
+import { SerialPort } from "serialport";
+import { ReadlineParser } from "@serialport/parser-readline"
+
 import Fastify from "fastify";
 import fastifyJwt from "@fastify/jwt";
 import cors from "@fastify/cors"
@@ -18,12 +20,51 @@ import { logRoutes } from "./routes/logRoute.js";
 import { attendanceRoutes } from "./routes/attendanceRoute.js";
 import { adminAccountRoutes } from "./routes/adminAccountRoute.js";
 import { employeeAccountRoutes } from "./routes/employeeAccountRoute.js";
+import { scheduleRoutes } from "./routes/scheduleRoute.js";
+import { incidentRoutes } from "./routes/incidentRoute.js";
+import { fingerprintRoutes } from "./routes/fingerprintRoute.js";
 
 const fastify = Fastify();
 const io = initSocket(fastify.server);
 
+const port = new SerialPort({
+  path: 'COM3',
+  baudRate: 9600
+});
+
+port.on('open', () => {
+  console.log('✅ Serial port open and ready');
+});
+
+const parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
+let enrollmentStatus = {};
+
+// Listen to Arduino messages
+parser.on('data', (data) => {
+  console.log('Arduino:', data);
+  
+  // Parse enrollment progress messages
+  if (data.includes('Place finger')) {
+    enrollmentStatus.message = 'Place your finger on the sensor';
+  } else if (data.includes('Remove finger')) {
+    enrollmentStatus.message = 'Remove your finger';
+  } else if (data.includes('Place same finger again')) {
+    enrollmentStatus.message = 'Place the same finger again';
+  } else if (data.includes('Prints matched')) {
+    enrollmentStatus.message = 'Fingerprint matched! Saving...';
+  } else if (data.includes('Stored!')) {
+    enrollmentStatus.status = 'complete';
+    enrollmentStatus.message = 'Registration complete!';
+  } else if (data.includes('Error')) {
+    enrollmentStatus.status = 'error';
+    enrollmentStatus.message = 'Enrollment failed. Please try again.';
+  }
+});
+
 fastify.decorate("pg", pool)
 fastify.decorate("io", io);
+fastify.decorate("port", port);
+fastify.decorate("enrollmentStatus", enrollmentStatus);
 
 fastify.register(fastifyJwt, {
   secret: "yourSuperSecretKeyHere",
@@ -73,6 +114,9 @@ fastify.register( logRoutes, {prefix: "/api", io} )
 fastify.register( attendanceRoutes, {prefix: "/api", io} )
 fastify.register( adminAccountRoutes, {prefix: "/api", io} )
 fastify.register( employeeAccountRoutes, {prefix: "/api", io})
+fastify.register( scheduleRoutes, {prefix: "/api", io})
+fastify.register( incidentRoutes, {prefix: "/api", io})
+fastify.register( fingerprintRoutes, { prefix: "/api", io });
 
 await initEmployeeDeletionSchedules(pool)
   .then(() => console.log('✅ Employee deletion scheduler started'))

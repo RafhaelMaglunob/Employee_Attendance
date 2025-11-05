@@ -33,6 +33,7 @@ export function Card({
   header,
   children,
   footer,
+  footerLabel,
   hasButton = false,
   width = "full",
   className = "",
@@ -75,6 +76,9 @@ export function Card({
           </button>
         </div>
       )}
+      <div>
+        {footerLabel}
+      </div>
     </div>
   );
 }

@@ -7,7 +7,6 @@ import Cookies from "js-cookie";
 
 function Login() {
     const navigate = useNavigate();
-    const [showLogin, setShowLogin] = useState(false)
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
@@ -15,9 +14,6 @@ function Login() {
     const headerContent = (
         <div className="flex flex-rows justify-between w-full">
             <h1 className="text-xl font-bold font-inter">Employee Management System</h1>
-            <Button onClick={() => setShowLogin(false)} className="flex md:hidden">
-                X
-            </Button>
         </div>
     )
     
@@ -54,16 +50,6 @@ function Login() {
             
             {/* Sticky Top Bar */}
             <div className="w-full h-15 bg-[#FFC629] sticky top-0 z-40 flex justify-end border-b-8 border-b-[#5E451D]">
-                <div className="md:hidden flex items-center justify-center px-4">
-                    {!showLogin && (
-                        <Button
-                            onClick={() => setShowLogin(true)}
-                            className="rounded-[50px]"
-                        >
-                            <p className="rounded-lg px-4 py-1 bg-green-400 text-white">Login</p>
-                        </Button>
-                    )}
-                </div>
             </div>
             
             {/* Main Content */}
@@ -79,9 +65,9 @@ function Login() {
 
                 {/* Login Card */}
                 <div
-                    className={`w-full sm:w-[470px] transition-all duration-500 ${
-                        showLogin ? 'opacity-100 scale-100' : 'opacity-0 scale-90 md:opacity-100 md:scale-100'
-                    } ${!showLogin && 'hidden md:block'}`}
+                    className={`w-full sm:w-[470px] transition-all duration-500 
+                        'opacity-100 scale-100' : 'opacity-0 scale-90 md:opacity-100 md:scale-100'
+                      'hidden md:block'}`}
                 >
                     <Card header={headerContent} className="[&_*]:text-xl" radius="none" width="full">
                         <div className="flex flex-col space-y-3 px-2 py-4 relative">

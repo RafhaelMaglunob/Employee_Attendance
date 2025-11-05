@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useFetchData } from "./component/hooks/useFetchData";
 import { Card } from "./component/ui/card";
 import { Table } from "./component/data/table";
+import FingerprintLoginModal from "./component/modals/FingerprintLoginModal";
 import {
   format,
   addWeeks,
@@ -17,6 +18,25 @@ import {
 function EmployeeDashboard() {
   const employeeId = localStorage.getItem("employeeId");
   const [currentWeek, setCurrentWeek] = useState(new Date());
+
+  // Fingerprint modal state
+  const [showFingerprintModal, setShowFingerprintModal] = useState(false);
+
+  // Fetch fingerprint data
+  const { data: fingerprintData = [] } = useFetchData(
+    employeeId ? `http://localhost:3001/api/employee/fingerprints/${employeeId}` : null,
+    (res) => res
+  );
+
+  useEffect(() => {
+    if (fingerprintData && fingerprintData.length === 0) {
+      setShowFingerprintModal(true);
+    }
+  }, [fingerprintData]);
+
+  const handleFingerprintSuccess = () => {
+    setShowFingerprintModal(false);
+  };
 
   // Weekly Summary data
   const [hoursWorked, setHoursWorked] = useState(32);
@@ -50,7 +70,6 @@ function EmployeeDashboard() {
   // Generate table data for each day
   const tableData = dayNames.map((dayName, i) => {
     const dayDate = addDays(weekStart, i);
-
     const daySchedules = scheduleData.filter((s) =>
       isSameDay(parseISO(s.work_date), dayDate)
     );
@@ -61,18 +80,13 @@ function EmployeeDashboard() {
       return format(parsed, "h:mm a");
     };
 
-    // Classify shifts
     let morningShiftData = null;
     let eveningShiftData = null;
 
     daySchedules.forEach((shift) => {
       const startHour = parse(shift.start_time, "HH:mm:ss", new Date()).getHours();
-
-      if (startHour >= 7 && startHour <= 13) {
-        morningShiftData = shift;
-      } else if (startHour >= 15 && startHour <= 20) {
-        eveningShiftData = shift;
-      }
+      if (startHour >= 7 && startHour <= 13) morningShiftData = shift;
+      else if (startHour >= 15 && startHour <= 20) eveningShiftData = shift;
     });
 
     const morningShift = morningShiftData ? (
@@ -101,11 +115,16 @@ function EmployeeDashboard() {
     };
   });
 
-
-
-
   return (
     <div className="space-y-6">
+      {showFingerprintModal && (
+        <FingerprintLoginModal
+          isOpen={showFingerprintModal}
+          onSuccess={handleFingerprintSuccess}
+          employeeId={employeeId}
+        />
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Weekly Schedule Card */}
         <Card radius="none" className="w-full">
@@ -121,7 +140,6 @@ function EmployeeDashboard() {
                 <button onClick={handleNextWeek} className="text-lg font-bold">{`>`}</button>
               </div>
             </div>
-
             <Table columns={columns} data={tableData} />
           </div>
         </Card>

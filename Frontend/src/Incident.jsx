@@ -4,6 +4,12 @@ import { Table } from './component/data/table'
 import { Button } from './component/ui/button'
 import { useFetchData } from './component/hooks/useFetchData'
 
+const formatDate = (dateStr) => {
+    if (!dateStr) return "-";
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
+
 function Incident() {
     const savedTab = localStorage.getItem("incidentTab");
 
@@ -17,7 +23,7 @@ function Incident() {
             incident_id: emp.incident_id,
             employee_id: emp.employee_id,
             name: emp.employee_name,
-            type: emp.incident_type,
+            incident_type: emp.incident_type,
             incident_date: emp.incident_date,
             status: emp.status,
             witness: emp.witness,
@@ -35,8 +41,12 @@ function Incident() {
     const tableColumns = [
         { key: "incident_id", title: "ID" },
         { key: "name", title: "Employee" },
-        { key: "type", title: "Type" },
-        { key: "incident_date", title: "Date" },
+        { key: "incident_type", title: "Type" },
+        { 
+            key: "incident_date", 
+            title: "Date",
+            render: row => formatDate(row.incident_date) 
+        },
         { 
             key: "status", 
             title: "Status", 
@@ -65,6 +75,30 @@ function Incident() {
     // Placeholder for handleView
     const handleView = (row) => {
         setSelectedIncident(row);
+    };
+
+    const handleResolve = async (incidentId) => {
+        if (!window.confirm("Mark this incident as resolved?")) return;
+
+        try {
+            const res = await fetch(`http://localhost:3001/api/incidents/${incidentId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: "Resolved" })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                alert("Incident marked as resolved!");
+                // Refresh incidents list
+                setSelectedIncident(data.data); // update the details view
+            } else {
+                alert(data.message || "Failed to update status");
+            }
+        } catch (err) {
+            console.error("Error updating incident:", err);
+            alert("Error updating incident status");
+        }
     };
 
     const filteredData = useMemo(() => {
@@ -125,7 +159,7 @@ function Incident() {
                                 <div className="flex-1 flex flex-col">
                                     <label className="text-xs">Date</label>
                                     <span className="px-4 py-2 rounded-lg bg-white border-2 font-semibold">
-                                        {selectedIncident?.incident_date || "-"}
+                                        {formatDate(selectedIncident?.incident_date) || "-"}
                                     </span>
                                 </div>
                             </div>
@@ -171,7 +205,15 @@ function Incident() {
                                 >
                                     Clear
                                 </Button>
-                                
+
+                                {selectedIncident?.status !== "Resolved" && (
+                                    <Button
+                                        onClick={() => handleResolve(selectedIncident.incident_id)}
+                                        className="px-3 py-2 bg-green-500 text-white rounded-lg"
+                                    >
+                                        Mark as Resolved
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     </Card>

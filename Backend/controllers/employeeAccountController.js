@@ -1,6 +1,8 @@
 import argon2 from "argon2";
 import jwt from 'jsonwebtoken';
+import { getIo } from "../socket.js";
 import { syncRow, deleteRow } from '../utils/syncToSupabase.js';
+import { emitRequestUpdate, emitRequestDelete, emitNotificationUpdate, emitNotificationCountUpdate } from '../utils/socketHelper.js';
 
 const TIME_RANGES = {
     Opening: { start_time: '09:00:00', end_time: '14:00:00' },
@@ -98,6 +100,7 @@ export function employeeAccountController(pool, io) {
     const addEmployeeDocuments = async (req, reply) => {
         const { id: employeeId } = req.params;
         const { documentType, link } = req.body;
+        const io = getIo();
 
         try {
             // Validation
@@ -116,6 +119,8 @@ export function employeeAccountController(pool, io) {
             }
 
             const client = await pool.connect();
+            let document;
+            
             try {
                 // Check if document already exists
                 const existingRes = await client.query(
@@ -125,17 +130,27 @@ export function employeeAccountController(pool, io) {
 
                 if (existingRes.rowCount > 0) {
                     // Update existing
-                    await client.query(
-                        'UPDATE employee_documents SET link = $1, status = $2, updated_at = NOW() WHERE employee_id = $3 AND document_type = $4',
+                    const { rows } = await client.query(
+                        'UPDATE employee_documents SET link = $1, status = $2, updated_at = NOW() WHERE employee_id = $3 AND document_type = $4 RETURNING *',
                         [link, 'Approved', employeeId, documentType]
                     );
+                    document = rows[0];
                 } else {
                     // Insert new
-                    await client.query(
-                        'INSERT INTO employee_documents (employee_id, document_type, link, status, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW())',
+                    const { rows } = await client.query(
+                        'INSERT INTO employee_documents (employee_id, document_type, link, status, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING *',
                         [employeeId, documentType, link, 'Approved']
                     );
+                    document = rows[0];
                 }
+
+                // Sync to Supabase
+                await syncRow('employee_documents', document, 'document_id');
+
+                // Emit Socket.IO event for real-time update
+                io.emit('adminDocumentUpdated', document);
+                io.to(`employee_${employeeId}`).emit('documentUpdated', document);
+
             } finally {
                 client.release();
             }
@@ -143,7 +158,7 @@ export function employeeAccountController(pool, io) {
             return reply.send({
                 success: true,
                 message: 'Document link saved successfully',
-                document: { documentType, link, status: 'Approved' }
+                document
             });
 
         } catch (error) {
@@ -154,6 +169,7 @@ export function employeeAccountController(pool, io) {
             });
         }
     };
+
 
     const getEmployeeDocuments = async (req, reply) => {
         const { id: employeeId } = req.params;
@@ -189,8 +205,8 @@ export function employeeAccountController(pool, io) {
         try {
             const requiredDocuments = ['SSS ID', 'Resume/CV', 'Pag-Ibig', 'PhilHealth', 'Barangay Clearance'];
 
-            const [documents] = await req.server.db.execute(
-                'SELECT document_type, status FROM employee_documents WHERE employee_id = ?',
+            const { rows: documents } = await pool.query(
+                'SELECT document_type, status FROM employee_documents WHERE employee_id = $1',
                 [employeeId]
             );
 
@@ -223,25 +239,49 @@ export function employeeAccountController(pool, io) {
         }
     };
 
-    // DELETE - Remove a document
+    // PATCH - Remove document link (soft delete)
     const deleteEmployeeDocument = async (req, reply) => {
         const { documentId } = req.params;
+        const io = getIo();
 
-        console.log("D")
         try {
             const client = await pool.connect();
+            let document;
+            
             try {
-                await client.query(
-                    `UPDATE employee_documents SET link = '' WHERE document_id = $1`,
+                // Update the link to empty string and status to Incomplete
+                const { rows } = await client.query(
+                    `UPDATE employee_documents 
+                     SET link = '', status = 'Incomplete', updated_at = NOW() 
+                     WHERE document_id = $1 
+                     RETURNING *`,
                     [documentId]
                 );
+
+                if (rows.length === 0) {
+                    return reply.status(404).send({
+                        success: false,
+                        message: 'Document not found'
+                    });
+                }
+
+                document = rows[0];
+
+                // Sync to Supabase
+                await syncRow('employee_documents', document, 'document_id');
+
+                // Emit Socket.IO event for real-time update
+                io.emit('adminDocumentDeleted', { document_id: documentId, employee_id: document.employee_id });
+                io.to(`employee_${document.employee_id}`).emit('documentDeleted', { document_id: documentId });
+
             } finally {
                 client.release();
             }
 
             return reply.send({
                 success: true,
-                message: 'Document deleted successfully'
+                message: 'Document link removed successfully',
+                document
             });
 
         } catch (error) {
@@ -257,6 +297,7 @@ export function employeeAccountController(pool, io) {
     const updateDocumentStatus = async (req, reply) => {
         const { documentId } = req.params;
         const { status } = req.body;
+        const io = getIo();
 
         try {
             if (!['Pending', 'Approved', 'Incomplete'].includes(status)) {
@@ -267,18 +308,38 @@ export function employeeAccountController(pool, io) {
             }
 
             const client = await pool.connect();
+            let document;
+            
             try {
-                await client.query(
-                    'UPDATE employee_documents SET status = $1, updated_at = NOW() WHERE document_id = $2',
+                const { rows } = await client.query(
+                    'UPDATE employee_documents SET status = $1, updated_at = NOW() WHERE document_id = $2 RETURNING *',
                     [status, documentId]
                 );
+
+                if (rows.length === 0) {
+                    return reply.status(404).send({
+                        success: false,
+                        message: 'Document not found'
+                    });
+                }
+
+                document = rows[0];
+
+                // Sync to Supabase
+                await syncRow('employee_documents', document, 'document_id');
+
+                // Emit Socket.IO event for real-time update
+                io.emit('adminDocumentUpdated', document);
+                io.to(`employee_${document.employee_id}`).emit('documentUpdated', document);
+
             } finally {
                 client.release();
             }
 
             return reply.send({
                 success: true,
-                message: 'Document status updated successfully'
+                message: 'Document status updated successfully',
+                document
             });
 
         } catch (error) {
@@ -401,28 +462,6 @@ export function employeeAccountController(pool, io) {
             return reply.status(500).send({ success: false, message: "Failed to get notification count" });
         }
     };
-    
-    const resetNotificationCount = async (req, reply) => {
-        const { id } = req.params; // employeeId
-
-        try {
-            // Update count to 0 and return the updated row
-            const res = await pool.query(
-                "UPDATE employee_notifications SET count = 0 WHERE employee_id = $1 RETURNING *",
-                [id]
-            );
-
-            // If no record exists for this employee, respond with count 0
-            if (res.rowCount === 0) {
-                return reply.send({ success: true, count: 0 });
-            }
-
-            return reply.send({ success: true, count: res.rows[0].count });
-        } catch (err) {
-            console.error("Error resetting notification count:", err);
-            return reply.status(500).send({ success: false, message: "Failed to reset notification count" });
-        }
-    };
 
     const getEmployeeNotifications = async (req, reply) => {
         const { id } = req.params;
@@ -472,30 +511,62 @@ export function employeeAccountController(pool, io) {
 
 
     const marKNotificationRead = async (req, reply) => {
+        const io = getIo();
         const { id } = req.params;
         
-        const client = await pool.connect();
-
-        try{
-            const updRes = await client.query(`
-                UPDATE notifications SET is_read = 'TRUE' WHERE id = $1 RETURNING *
-            `, [id])
-            const updated_notification = updRes.rows[0]
-            reply.send({ success: true, notification: updated_notification });
-
-            setImmediate(async () => {
-                try {
-                    syncRow('notifications',updated_notification, 'id');
-                } catch (err) {
-                    console.error("Supabase sync error:", err);
-                }
-            });
+        try {
+        const updRes = await pool.query(
+            `UPDATE notifications SET is_read = TRUE WHERE id = $1 RETURNING *`,
+            [id]
+        );
+        
+        const updated_notification = updRes.rows[0];
+        
+        if (updated_notification) {
+            // ✅ REAL-TIME - Notify the employee
+            emitNotificationUpdate(io, updated_notification.employee_id, updated_notification);
         }
-        catch(err) {
+
+        reply.send({ success: true, notification: updated_notification });
+
+        // Sync to Supabase
+        setImmediate(async () => {
+            try {
+            await syncRow('notifications', updated_notification, 'id');
+            } catch (err) {
+            console.error("Supabase sync error:", err);
+            }
+        });
+
+        } catch (err) {
             console.error(err);
-            return reply.status(500).send({ error: "Failed to mark notifications" });
+            return reply.status(500).send({ error: "Failed to mark notification" });
         }
-    }
+    };
+
+    const resetNotificationCount = async (req, reply) => {
+        const io = getIo();
+        const { id } = req.params;
+
+        try {
+        const res = await pool.query(
+            "UPDATE employee_notifications SET count = 0 WHERE employee_id = $1 RETURNING *",
+            [id]
+        );
+
+        if (res.rowCount === 0) {
+            return reply.send({ success: true, count: 0 });
+        }
+
+        // ✅ REAL-TIME - Update notification count
+        emitNotificationCountUpdate(io, id, 0);
+
+        return reply.send({ success: true, count: 0 });
+        } catch (err) {
+        console.error("Error resetting notification count:", err);
+        return reply.status(500).send({ success: false, message: "Failed to reset count" });
+        }
+    };
 
     const sendRequest = async (req, reply) => {
         try {
@@ -621,27 +692,27 @@ export function employeeAccountController(pool, io) {
                 insertedRow = rows[0];
             }
 
+            const { rows: emp } = await pool.query(`SELECT fullname FROM employees WHERE employee_id = $1`, [id]);
+            
+            const payload = {
+                ...insertedRow,
+                request_type,
+                employee_name: emp[0]?.fullname || "",
+                link: insertedRow.attach_link,
+                status: insertedRow.status?.toLowerCase() || 'pending'
+            };
+            emitRequestUpdate(io, payload);
+
             // Sync to Supabase
-            if (insertedRow) {
+            setImmediate(async () => {
                 try {
-                    await syncRow(table, insertedRow, "request_id");
+                await syncRow(table, insertedRow, "request_id");
                 } catch (err) {
-                    console.warn("syncRow warning:", err?.message || err);
+                console.warn("Supabase sync error:", err);
                 }
-            }
+            });
 
-            // Update notification
-            await pool.query(
-                `INSERT INTO employee_notifications (employee_id, count)
-                VALUES ($1, 1)
-                ON CONFLICT (employee_id) DO UPDATE SET count = employee_notifications.count + 1`,
-                [id]
-            );
-
-            // Emit WebSocket event
-            if (io) io.to(id).emit(`${request_type}RequestCreated`, insertedRow);
-
-            return reply.code(201).send({ success: true, message: "Request submitted", data: insertedRow });
+            return reply.code(201).send({ success: true, message: "Request submitted", data: payload });
 
         } catch (err) {
             console.error("Error submitting request:", err);
@@ -650,27 +721,56 @@ export function employeeAccountController(pool, io) {
     };
 
     const deleteRequest = async (req, reply) => {
-        const { type, requestId } = req.params; // type = "leave" or "overtime"
-
-        if (!["leave", "overtime"].includes(type)) return reply.code(400).send({ success: false, message: "Invalid type" });
-
-        const table = type === "leave" ? "leave_requests" : "overtime_requests";
+        const io = getIo();
+        const { requestId } = req.params;
 
         try {
-            const result = await pool.query(
-                `DELETE FROM ${table} WHERE request_id = $1 RETURNING *`,
-                [requestId]
+        // Find the request first to get type and employee_id
+        const queries = [
+            { table: 'leave_requests', type: 'leave' },
+            { table: 'overtime_requests', type: 'overtime' },
+            { table: 'offset_requests', type: 'off-set' }
+        ];
+
+        let found = null;
+        for (const q of queries) {
+            const res = await pool.query(
+            `SELECT employee_id, * FROM ${q.table} WHERE request_id = $1`,
+            [requestId]
             );
+            if (res.rows.length > 0) {
+            found = { ...res.rows[0], table: q.table, type: q.type };
+            break;
+            }
+        }
 
-            if (result.rowCount === 0) return reply.code(404).send({ success: false, message: "Request not found" });
+        if (!found) {
+            return reply.code(404).send({ success: false, message: "Request not found" });
+        }
 
-            reply.send({ success: true, message: "Request cancelled" });
+        // Delete
+        await pool.query(`DELETE FROM ${found.table} WHERE request_id = $1`, [requestId]);
+
+        // ✅ REAL-TIME DELETE - Notify employee and admins
+        emitRequestDelete(io, requestId, found.type, found.employee_id);
+
+        // Sync deletion
+        setImmediate(async () => {
+            try {
+            await deleteRow(found.table, "request_id", requestId);
+            } catch (err) {
+            console.error("Supabase delete error:", err);
+            }
+        });
+
+        reply.send({ success: true, message: "Request cancelled" });
 
         } catch (err) {
-            console.error("Delete request error:", err);
-            reply.code(500).send({ success: false, message: "Failed to cancel request" });
+        console.error("Delete request error:", err);
+        reply.code(500).send({ success: false, message: "Failed to cancel request" });
         }
     };
+
 
     const getRequests = async (req, reply) => {
         const { id } = req.params;

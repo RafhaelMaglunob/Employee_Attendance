@@ -34,7 +34,7 @@ export default function RequestModal({ isOpen, onClose, request, onCancel, onAct
   })();
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
       <div className="bg-white rounded-xl w-[90%] max-w-[500px] p-6 shadow-xl relative">
         <h2 className="text-2xl font-semibold mb-2">{request.type}</h2>
         <p className="text-gray-700 mb-4">{formatDateForInput(request.date)}</p>
@@ -52,16 +52,16 @@ export default function RequestModal({ isOpen, onClose, request, onCancel, onAct
           )}
         </div>
 
-        <span className={`px-3 py-1 rounded-full font-medium ${statusColors[request.status] || "bg-gray-100 text-gray-800"}`}>
+        <span className={`px-3 py-1 rounded-full font-medium ${statusColors[request.status?.toLowerCase()] || "bg-gray-100 text-gray-800"}`}>
           {request.status?.charAt(0).toUpperCase() + request.status?.slice(1) || "Unknown"}
         </span>
 
         {/* Action Buttons */}
         <div className="mt-6 flex justify-end gap-3">
           {/* Cancel button only if pending */}
-          {request.status === "pending" && (
+          {request.status?.toLowerCase() === "pending" && (
             <Button
-              onClick={() => onCancel(request.request_id)}
+              onClick={() => onCancel(request.request_id, request.request_type)}
               className="bg-red-500 px-2 py-1 rounded-xl hover:bg-red-600 text-white"
             >
               Cancel

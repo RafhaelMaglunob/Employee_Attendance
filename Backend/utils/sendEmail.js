@@ -167,6 +167,79 @@ Welcome back to the team!
 	await sendMailWithQueue(mail);
 }
 
+export async function sendAvailabilityReminderEmail(to, fullname) {
+	const mail = {
+		from: `"The Crunch BS" <${process.env.GMAIL_ADDRESS}>`,
+		to,
+		subject: "📅 Submit Your Availability for Next Week",
+		html: `
+			<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+				<h2 style="color: #FFC629;">Hi ${fullname}! 👋</h2>
+				<p>This is a friendly reminder to submit your availability for next week's schedule.</p>
+				
+				<div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0;">
+					<strong>⏰ Deadline: Friday, 11:59 PM</strong>
+				</div>
+				
+				<p>Please log in to your account and mark your available shifts:</p>
+				<ul>
+					<li><strong>Opening Shift:</strong> 9:00 AM - 2:00 PM</li>
+					<li><strong>Closing Shift:</strong> 6:00 PM - 11:00 PM</li>
+				</ul>
+				
+				<p>⚠️ Schedules will be finalized after the deadline. Any pending requests after Friday night will be automatically rejected.</p>
+				
+				<a href="${process.env.APP_URL || 'http://localhost:3000'}/employee/schedule" 
+				   style="display: inline-block; background-color: #000; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin: 20px 0;">
+					Submit Availability Now
+				</a>
+				
+				<p style="color: #666; font-size: 12px; margin-top: 30px;">
+					If you have any questions, please contact HR.<br>
+					– The Crunch BS Team
+				</p>
+			</div>
+		`
+	};
+	await sendMailWithQueue(mail);
+}
+
+export async function sendScheduleFinalizedEmail(to, fullname, workDate, startTime, endTime) {
+	const date = new Date(workDate);
+	const formattedDate = date.toLocaleDateString("en-US", { 
+		weekday: 'long', 
+		year: 'numeric', 
+		month: 'long', 
+		day: 'numeric' 
+	});
+	
+	const mail = {
+		from: `"The Crunch BS" <${process.env.GMAIL_ADDRESS}>`,
+		to,
+		subject: "✅ Your Schedule Has Been Confirmed",
+		html: `
+			<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+				<h2 style="color: #FFC629;">Hi ${fullname}! 🎉</h2>
+				<p>Good news! Your schedule for next week has been confirmed.</p>
+				
+				<div style="background-color: #d1f5cf; padding: 20px; border-radius: 5px; margin: 20px 0;">
+					<h3 style="margin: 0 0 10px 0;">📅 Schedule Details</h3>
+					<p style="margin: 5px 0;"><strong>Date:</strong> ${formattedDate}</p>
+					<p style="margin: 5px 0;"><strong>Time:</strong> ${startTime} - ${endTime}</p>
+				</div>
+				
+				<p>Please make sure to arrive on time. If you need to make any changes, contact your supervisor immediately.</p>
+				
+				<p style="color: #666; font-size: 12px; margin-top: 30px;">
+					See you at work!<br>
+					– The Crunch BS Team
+				</p>
+			</div>
+		`
+	};
+	await sendMailWithQueue(mail);
+}
+
 
 // 🔹 Auto-detect internet and resend queued emails
 let wasOffline = false;

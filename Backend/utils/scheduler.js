@@ -1,27 +1,27 @@
+// utils/scheduleAutomation.js
 import { pool } from "../db/pool.js";
 import cron from "node-cron";
 import { syncRow, deleteRow } from "./syncToSupabase.js";
+import { sendAvailabilityReminderEmail, sendScheduleFinalizedEmail } from "./sendEmail.js";
+import { getIo } from "../socket.js";
 
 /**
  * Constants / Shift definitions
  */
 const SHIFTS = {
-	opening: { start: "09:00:00", end: "14:00:00", hours: 5 }, // part-time opening = 5h
-	closingPT: { start: "18:00:00", end: "23:00:00", hours: 5 }, // part-time closing = 5h
-	openingFT: { start: "09:00:00", end: "18:00:00", hours: 9 }, // full-time opening = 9h
-	closingFT: { start: "14:00:00", end: "23:00:00", hours: 9 }  // full-time closing = 9h
+	opening: { start: "09:00:00", end: "14:00:00", hours: 5 },
+	closingPT: { start: "18:00:00", end: "23:00:00", hours: 5 },
+	openingFT: { start: "09:00:00", end: "18:00:00", hours: 9 },
+	closingFT: { start: "14:00:00", end: "23:00:00", hours: 9 }
 };
 
-/**
- * Helpers
- */
 function isoDate(d) {
-	return d.toISOString().slice(0, 10); // YYYY-MM-DD
+	return d.toISOString().slice(0, 10);
 }
 
 async function getNextWeekDates() {
 	const today = new Date();
-	const day = today.getDay(); // 0 Sun .. 6 Sat
+	const day = today.getDay();
 	const daysUntilNextMonday = ((8 - day) % 7) || 7;
 	const base = new Date(today);
 	base.setDate(base.getDate() + daysUntilNextMonday);
@@ -36,24 +36,57 @@ async function getNextWeekDates() {
 }
 
 /**
- * Auto-assign Full-Time employees for the next week.
+ * ✅ Send availability reminder every Thursday at 6:00 AM
  */
-cron.schedule("*/5 * * * * 5", async () => {
+cron.schedule("0 6 * * 4", async () => {
+	try {
+		console.log("📧 Sending availability reminder emails...");
+
+		// Get all active part-time employees
+		const { rows: ptEmployees } = await pool.query(`
+			SELECT employee_id, fullname, email
+			FROM employees
+			WHERE employment_type = 'Part-Time'
+			  AND status IN ('Employed', 'Probationary')
+		`);
+
+		for (const emp of ptEmployees) {
+			try {
+				await sendAvailabilityReminderEmail(emp.email, emp.fullname);
+				console.log(`✅ Reminder sent to ${emp.fullname}`);
+			} catch (err) {
+				console.error(`❌ Failed to send to ${emp.fullname}:`, err.message);
+			}
+		}
+
+		console.log(`📧 Sent ${ptEmployees.length} availability reminders.`);
+	} catch (err) {
+		console.error("🔥 Availability reminder error:", err);
+	}
+});
+
+/**
+ * ✅ Auto-assign Full-Time employees (runs every Friday at 11:59 PM)
+ */
+cron.schedule("59 23 * * 5", async () => {
 	try {
 		console.log("🗓️ Auto-assign Full-Time: Starting...");
 
-		// 1) Get FT employees who are active
 		const { rows: ftRows } = await pool.query(`
-			SELECT employee_id
+			SELECT employee_id, fullname, email
 			FROM employees
 			WHERE employment_type = 'Full-Time'
 			  AND status IN ('Employed', 'Probationary')
+			  AND (availability_disabled IS NULL OR availability_disabled = false)
 			ORDER BY employee_id
 		`);
-		const ftEmployees = ftRows.map(r => r.employee_id);
-		if (ftEmployees.length === 0) return console.log("No full-time employees found.");
+		const ftEmployees = ftRows.map(r => ({ id: r.employee_id, name: r.fullname, email: r.email }));
+		
+		if (ftEmployees.length === 0) {
+			console.log("No full-time employees available.");
+			return;
+		}
 
-		// 2) Compute historical hours fairness (last 49 days)
 		const { rows: hist } = await pool.query(`
 			SELECT s.employee_id,
 				   COALESCE(SUM(EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 3600), 0) AS hours_last_49d
@@ -64,13 +97,12 @@ cron.schedule("*/5 * * * * 5", async () => {
 		`);
 
 		const histMap = new Map(hist.map(r => [r.employee_id, Number(r.hours_last_49d)]));
-		const assignedThisWeek = new Map(ftEmployees.map(id => [id, 0]));
+		const assignedThisWeek = new Map(ftEmployees.map(emp => [emp.id, 0]));
 
-		// 4) Dates next week
 		const nextWeekDates = await getNextWeekDates();
 		const nextWeekStr = nextWeekDates.map(isoDate);
 
-		// 5) Clear old auto schedules (select rows first so we can call deleteRow)
+		// Clear old schedules
 		const { rows: toDelete } = await pool.query(`
 			SELECT schedule_id
 			FROM employee_schedule
@@ -82,7 +114,6 @@ cron.schedule("*/5 * * * * 5", async () => {
 		`, [nextWeekStr]);
 
 		if (toDelete.length > 0) {
-			// delete from DB
 			await pool.query(`
 				DELETE FROM employee_schedule
 				WHERE work_date = ANY($1::date[])
@@ -92,18 +123,17 @@ cron.schedule("*/5 * * * * 5", async () => {
 				  )
 			`, [nextWeekStr]);
 
-			// sync deletes to Supabase
 			for (const r of toDelete) {
 				try {
-					deleteRow("employee_schedule", "schedule_id", r.schedule_id);
+					await deleteRow("employee_schedule", "schedule_id", r.schedule_id);
 				} catch (e) {
 					console.warn("deleteRow warning:", e?.message || e);
 				}
 			}
-			console.log(`🧹 Cleared ${toDelete.length} previous FT schedule rows and synced deletions.`);
+			console.log(`🧹 Cleared ${toDelete.length} previous FT schedule rows.`);
 		}
 
-		// 6) Assign 1 FT per day (with required rest days)
+		// Assign schedules
 		for (let i = 0; i < nextWeekStr.length; i++) {
 			const work_date = nextWeekStr[i];
 			const shiftKey = (i % 2 === 0) ? "openingFT" : "closingFT";
@@ -112,28 +142,25 @@ cron.schedule("*/5 * * * * 5", async () => {
 			let candidate = null;
 			let minScore = Infinity;
 
-			for (const id of ftEmployees) {
-				const histHours = histMap.get(id) || 0;
-				const assignedHoursSoFar = assignedThisWeek.get(id) || 0;
+			for (const emp of ftEmployees) {
+				const histHours = histMap.get(emp.id) || 0;
+				const assignedHoursSoFar = assignedThisWeek.get(emp.id) || 0;
 				const assignedDaysSoFar = Math.round(assignedHoursSoFar / shift.hours);
 
-				// Limit: Full-Time should only have 5 workdays (2 days off)
 				if (assignedDaysSoFar >= 5) continue;
 
 				const score = histHours + assignedHoursSoFar;
 				if (score < minScore) {
 					minScore = score;
-					candidate = id;
+					candidate = emp;
 				}
 			}
 
-			// If no candidate is eligible → skip (will backfill later)
 			if (!candidate) {
-				console.log(`⚠️ No full-time available for ${work_date}, leaving for backfill`);
+				console.log(`⚠️ No full-time available for ${work_date}`);
 				continue;
 			}
 
-			// Insert/update schedule and RETURN the final row to sync
 			const { rows: ins } = await pool.query(`
 				INSERT INTO employee_schedule (employee_id, work_date, start_time, end_time, status, created_at, updated_at)
 				VALUES ($1, $2, $3, $4, 'approved', NOW(), NOW())
@@ -144,7 +171,7 @@ cron.schedule("*/5 * * * * 5", async () => {
 					status = EXCLUDED.status,
 					updated_at = NOW()
 				RETURNING *
-			`, [candidate, work_date, shift.start, shift.end]);
+			`, [candidate.id, work_date, shift.start, shift.end]);
 
 			if (ins.length > 0) {
 				try {
@@ -154,63 +181,20 @@ cron.schedule("*/5 * * * * 5", async () => {
 				}
 			}
 
-			assignedThisWeek.set(candidate, assignedThisWeek.get(candidate) + shift.hours);
-			console.log(`FT assigned: ${candidate} | ${work_date} | ${shiftKey}`);
-		}
+			assignedThisWeek.set(candidate.id, assignedThisWeek.get(candidate.id) + shift.hours);
+			console.log(`FT assigned: ${candidate.name} | ${work_date} | ${shiftKey}`);
 
-		// 7) Backfill missing FT days (ensure at least 1 FT per day)
-		for (let i = 0; i < nextWeekStr.length; i++) {
-			const work_date = nextWeekStr[i];
-
-			const { rows: present } = await pool.query(`
-				SELECT 1 FROM employee_schedule
-				WHERE work_date = $1
-				  AND employee_id IN (SELECT employee_id FROM employees WHERE employment_type = 'Full-Time')
-				LIMIT 1
-			`, [work_date]);
-
-			if (present.length === 0) {
-				// pick FT with least (historical + assignedThisWeek)
-				let best = null;
-				let lowest = Infinity;
-				for (const id of ftEmployees) {
-					const score = (histMap.get(id) || 0) + (assignedThisWeek.get(id) || 0);
-					if (score < lowest) { lowest = score; best = id; }
-				}
-
-				// if still no best (shouldn't happen), skip
-				if (!best) {
-					console.warn("No FT available to backfill for", work_date);
-					continue;
-				}
-
-				const shiftKey = (i % 2 === 0) ? "openingFT" : "closingFT";
-				const shift = SHIFTS[shiftKey];
-
-				const { rows: ins } = await pool.query(`
-					INSERT INTO employee_schedule (employee_id, work_date, start_time, end_time, status, created_at, updated_at)
-					VALUES ($1, $2, $3, $4, 'approved', NOW(), NOW())
-					ON CONFLICT (employee_id, work_date)
-					DO UPDATE SET
-						start_time = EXCLUDED.start_time,
-						end_time = EXCLUDED.end_time,
-						status = EXCLUDED.status,
-						updated_at = NOW()
-					RETURNING *
-				`, [best, work_date, shift.start, shift.end]);
-
-				if (ins.length > 0) {
-					try {
-						await syncRow("employee_schedule", ins[0], "employee_id,work_date");
-					} catch (e) {
-						console.warn("syncRow warning:", e?.message || e);
-					}
-				}
-
-				assignedThisWeek.set(best, assignedThisWeek.get(best) + shift.hours);
-				console.log(`🔄 Backfilled FT: ${best} | ${work_date} | ${shiftKey}`);
+			// Send email notification
+			try {
+				await sendScheduleFinalizedEmail(candidate.email, candidate.name, work_date, shift.start, shift.end);
+			} catch (err) {
+				console.error(`Failed to send schedule email to ${candidate.name}`);
 			}
 		}
+
+		// Emit real-time update to all admins
+		const io = getIo();
+		io.emit('scheduleUpdated', { message: 'Full-time schedules updated', dates: nextWeekStr });
 
 		console.log("✅ Full-Time auto-assignment complete.");
 	} catch (err) {
@@ -219,33 +203,36 @@ cron.schedule("*/5 * * * * 5", async () => {
 });
 
 /**
- * Finalize Part-Time requests every Friday 23:59
+ * ✅ Finalize Part-Time requests every Friday 11:59 PM
  */
-cron.schedule("*/5 * * * * 5", async () => {
+cron.schedule("59 23 * * 5", async () => {
 	try {
-		console.log("🛠️ Finalizing Part-Time...");
+		console.log("🛠️ Finalizing Part-Time schedules...");
 
 		const nextWeekDates = await getNextWeekDates();
 		const nextWeekStr = nextWeekDates.map(isoDate);
+		const io = getIo();
 
 		for (const work_date of nextWeekStr) {
 			const o = SHIFTS.opening;
 			const c = SHIFTS.closingPT;
 
+			// Check opening slot
 			const { rows: openingApproved } = await pool.query(`
 				SELECT 1 FROM employee_schedule
 				WHERE work_date = $1 AND start_time = $2 AND end_time = $3 AND status = 'approved'
 			`, [work_date, o.start, o.end]);
 
+			// Check closing slot
 			const { rows: closingApproved } = await pool.query(`
 				SELECT 1 FROM employee_schedule
 				WHERE work_date = $1 AND start_time = $2 AND end_time = $3 AND status = 'approved'
 			`, [work_date, c.start, c.end]);
 
-			// Approve one pending opening PT if slot free
+			// Approve opening PT
 			if (openingApproved.length === 0) {
 				const { rows: pendingOpening } = await pool.query(`
-					SELECT s.* 
+					SELECT s.*, e.fullname, e.email 
 					FROM employee_schedule s
 					JOIN employees e ON e.employee_id = s.employee_id
 					WHERE s.work_date = $1
@@ -267,20 +254,21 @@ cron.schedule("*/5 * * * * 5", async () => {
 					`, [pick.schedule_id]);
 
 					if (updated.length > 0) {
-						try {
-							await syncRow("employee_schedule", updated[0], "employee_id,work_date");
-						} catch (e) {
-							console.warn("syncRow warning:", e?.message || e);
-						}
-						console.log(`✅ Approved PT opening: schedule_id=${updated[0].schedule_id} date=${work_date}`);
+						await syncRow("employee_schedule", updated[0], "employee_id,work_date");
+						await sendScheduleFinalizedEmail(pick.email, pick.fullname, work_date, o.start, o.end);
+						
+						// Real-time notification
+						io.to(`employee_${pick.employee_id}`).emit('scheduleApproved', updated[0]);
+						
+						console.log(`✅ Approved PT opening: ${pick.fullname} on ${work_date}`);
 					}
 				}
 			}
 
-			// Approve one pending closing PT if slot free
+			// Approve closing PT
 			if (closingApproved.length === 0) {
 				const { rows: pendingClosing } = await pool.query(`
-					SELECT s.* 
+					SELECT s.*, e.fullname, e.email 
 					FROM employee_schedule s
 					JOIN employees e ON e.employee_id = s.employee_id
 					WHERE s.work_date = $1
@@ -302,19 +290,19 @@ cron.schedule("*/5 * * * * 5", async () => {
 					`, [pick.schedule_id]);
 
 					if (updated.length > 0) {
-						try {
-							await syncRow("employee_schedule", updated[0], "employee_id,work_date");
-						} catch (e) {
-							console.warn("syncRow warning:", e?.message || e);
-						}
-						console.log(`✅ Approved PT closing: schedule_id=${updated[0].schedule_id} date=${work_date}`);
+						await syncRow("employee_schedule", updated[0], "employee_id,work_date");
+						await sendScheduleFinalizedEmail(pick.email, pick.fullname, work_date, c.start, c.end);
+						
+						io.to(`employee_${pick.employee_id}`).emit('scheduleApproved', updated[0]);
+						
+						console.log(`✅ Approved PT closing: ${pick.fullname} on ${work_date}`);
 					}
 				}
 			}
 
-			// Reject leftover pending PT requests for this date (select then update & sync)
+			// Reject leftover pending
 			const { rows: leftoverPending } = await pool.query(`
-				SELECT s.*
+				SELECT s.*, e.email, e.fullname
 				FROM employee_schedule s
 				JOIN employees e ON e.employee_id = s.employee_id
 				WHERE s.work_date = $1
@@ -331,12 +319,9 @@ cron.schedule("*/5 * * * * 5", async () => {
 				`, [p.schedule_id]);
 
 				if (updated.length > 0) {
-					try {
-						await syncRow("employee_schedule", updated[0], "employee_id,work_date");
-					} catch (e) {
-						console.warn("syncRow warning:", e?.message || e);
-					}
-					console.log(`❌ Rejected PT (leftover): schedule_id=${updated[0].schedule_id} date=${work_date}`);
+					await syncRow("employee_schedule", updated[0], "employee_id,work_date");
+					io.to(`employee_${p.employee_id}`).emit('scheduleRejected', updated[0]);
+					console.log(`❌ Rejected PT: ${p.fullname} on ${work_date}`);
 				}
 			}
 		}
@@ -350,10 +335,9 @@ cron.schedule("*/5 * * * * 5", async () => {
 /**
  * Cleanup old schedules weekly (Sunday 03:00 AM)
  */
-cron.schedule("0 0 3 * * 0", async () => {
+cron.schedule("0 3 * * 0", async () => {
 	try {
 		console.log("🧹 Cleaning old schedules...");
-		// select rows to delete so we can sync deletions
 		const { rows: oldRows } = await pool.query(`
 			SELECT schedule_id
 			FROM employee_schedule
@@ -370,7 +354,7 @@ cron.schedule("0 0 3 * * 0", async () => {
 
 			for (const r of oldRows) {
 				try {
-					deleteRow("employee_schedule", "schedule_id", r.schedule_id);
+					await deleteRow("employee_schedule", "schedule_id", r.schedule_id);
 				} catch (e) {
 					console.warn("deleteRow warning:", e?.message || e);
 				}

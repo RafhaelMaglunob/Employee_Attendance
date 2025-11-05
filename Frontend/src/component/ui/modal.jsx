@@ -12,7 +12,7 @@ export function ModalContainer({
     children, 
     width = "lg", 
     className = "",
-    disableOverlayClose = false, // ✅ new prop
+    disableOverlayClose = false,
 }) {
     const widthClasses = {
         sm: "max-w-sm",
@@ -33,7 +33,7 @@ export function ModalContainer({
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
             onClick={handleOverlayClick}
         >
             <div

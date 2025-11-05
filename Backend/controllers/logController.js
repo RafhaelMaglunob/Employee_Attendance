@@ -132,46 +132,11 @@ export function logController(pool) {
         }
     };
 
-    const getIncidentLogs = async (req, reply) => {
-        const { status } = req.query;
-        let params = [];
-        let query = `
-            SELECT 
-                i.incident_id,
-                i.employee_id,
-                e.fullname AS employee_name,
-                i.incident_type,
-                TO_CHAR(i.incident_date, 'YYYY-MM-DD') AS incident_date,
-                i.status,
-                i.witness,
-                i.reported_by,
-                i.description
-            FROM incident_reports i
-            JOIN employees e ON i.employee_id = e.employee_id
-        `;
-
-        if (status && status.toLowerCase() !== "all") {
-            query += " WHERE LOWER(i.status) = $1";
-            params.push(status.toLowerCase());
-        }
-
-        query += " ORDER BY i.incident_id ASC;";
-
-        try {
-            const result = await pool.query(query, params);
-            return { success: true, data: result.rows };
-        } catch (err) {
-            console.error("Database Error:", err.message);
-            reply.status(500).send({ error: "Database query failed" });
-        }
-    };
-
     return {
         getAllAuditLogs,
         getAllWorkLogs,
         getEmployeePayPeriod,
         getTotalWorkLogs,
         getSingleWorkLog,
-        getIncidentLogs,
     };
 }

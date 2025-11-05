@@ -29,7 +29,7 @@ export default function AdminLayout() {
   const currentPath = location.pathname.split("/")[1] || "dashboard";
   const [path, setPath] = useState(currentPath);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const Admin_buttonPath = ["Dashboard", "Employees", "Auditing", "Salary", "Incidents", "Reports", "Approvals"]
+  const Admin_buttonPath = ["Dashboard", "Employees", "Auditing", "Salary", "Incidents", "Reports", "Approvals", "Scheduling"]
   const HR_buttonPath = ["Dashboard", "Employees", "Auditing", "Salary", "Incidents", "Reports", "Approvals"]
   const HeadStaff_buttonPath = ["Dashboard","Scheduling", "Attendance"];
 
