@@ -77,7 +77,7 @@ export default function RequestViewModal({ isOpen, onClose, request }) {
 				hours: extraData.hours || null,
 			};
 			const res = await fetch(
-				`http://localhost:3001/api/employee/requests/${request.request_type}/${request.request_id}`,
+				`http://192.168.1.9:3001/api/employee/requests/${request.request_type}/${request.request_id}`,
 				{
 					method: "PUT",
 					headers: { "Content-Type": "application/json" },
@@ -104,7 +104,7 @@ export default function RequestViewModal({ isOpen, onClose, request }) {
 
 		try {
 			const res = await fetch(
-				`http://localhost:3001/api/employee/leave/${request.employee_id}?start=${startDate}&end=${endDate}`
+				`http://192.168.1.9:3001/api/employee/leave/${request.employee_id}?start=${startDate}&end=${endDate}`
 			);
 			const data = await res.json();
 			setAffectedDays(data.days || 0);
@@ -216,7 +216,7 @@ export default function RequestViewModal({ isOpen, onClose, request }) {
 
 		try {
 			const res = await fetch(
-				`http://localhost:3001/api/employee/leave/${request.employee_id}?start=${startDate}&end=${endDate}`
+				`http://192.168.1.9:3001/api/employee/leave/${request.employee_id}?start=${startDate}&end=${endDate}`
 			);
 			const data = await res.json();
 			setAffectedDays(data.days || 0);

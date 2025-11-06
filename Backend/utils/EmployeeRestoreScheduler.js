@@ -48,13 +48,13 @@ export const restoreEmployeeNow = async (pool, employee) => {
             ON CONFLICT (id) DO NOTHING
             RETURNING *
         `, [employee.employee_id]);
-        await Promise.all(restoredDeps.rows.map(dep => syncRow('employee_dependents', dep)));
+        await Promise.all(restoredDeps.rows.map(dep => syncRow('employee_dependents', dep, "id")));
 
         // 3️⃣ Restore documents
         const restoredDocs = await client.query(`
             INSERT INTO employee_documents
-            (document_id, employee_id, sss_id, resume_cv, pagibig, philhealth, barangay_clearance)
-            SELECT document_id, employee_id, sss_id, resume_cv, pagibig, philhealth, barangay_clearance
+            (document_id, employee_id, document_type, link, status)
+            SELECT document_id, employee_id, document_type, link, status
             FROM employee_documents_archive
             WHERE employee_id = $1
             RETURNING *

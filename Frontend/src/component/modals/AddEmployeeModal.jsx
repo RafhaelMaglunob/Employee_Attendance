@@ -5,7 +5,7 @@ import * as XLSX from "xlsx";
 import ConfirmModal from "./ConfirmModal";
 import MessageModal from "./MessageModal";
 
-export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
+export default function AddEmployeeModal({ isOpen, onClose, pushData }) {
 	const [formValues, setFormValues] = useState({});
 	const [fieldErrors, setFieldErrors] = useState({});
 	const [isSubmitting, setIsSubmitting] = useState(false);
@@ -15,6 +15,7 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 	const [showConfirm, setShowConfirm] = useState(false);
 	const [showMessage, setShowMessage] = useState(false);
 	const [messageText, setMessageText] = useState("");
+	const [messageType, setMessageType] = useState("success");
 	const [confirmAction, setConfirmAction] = useState(null);
 	const excelInputRef = useRef(null);
 
@@ -26,7 +27,7 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 	}, [excelRows]);
 
 	const formatSSS = (val) => {
-		val = val.replace(/\D/g, "").slice(0, 10); // only digits
+		val = val.replace(/\D/g, "").slice(0, 10);
 		if (val.length > 2 && val.length <= 9) val = val.slice(0, 2) + "-" + val.slice(2);
 		if (val.length > 9) val = val.slice(0, 2) + "-" + val.slice(2, 9) + "-" + val.slice(9);
 		return val;
@@ -48,13 +49,13 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 
 	const formatPhoneNumber = (val) => {
 		if (!val) return "";
-		val = val.toString().replace(/\D/g, "").slice(0, 11); // only digits
-		if (!val.startsWith("09")) val = "09" + val.slice(2); // ensure starts with 09
+		val = val.toString().replace(/\D/g, "").slice(0, 11);
+		if (!val.startsWith("09")) val = "09" + val.slice(2);
 
 		let formatted = "";
-		if (val.length > 0) formatted += val.slice(0, 4);       // 09XX
-		if (val.length > 4) formatted += " " + val.slice(4, 7); // XXX
-		if (val.length > 7) formatted += " " + val.slice(7, 11); // XXXX
+		if (val.length > 0) formatted += val.slice(0, 4);
+		if (val.length > 4) formatted += " " + val.slice(4, 7);
+		if (val.length > 7) formatted += " " + val.slice(7, 11);
 		return formatted;
 	};
 
@@ -92,8 +93,16 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 		city: row["City"] || "",
 		postal_code: row["Postal Code"] || "",
 		gcash_no: formatPhoneNumber(row["GCash Number"]) || "",
-		start_of_contract: row["Start of Contract"] || "",
-		end_of_contract: row["End of Contract"] || "",
+		start_of_contract: row["Start of Contract"] 
+			? typeof row["Start of Contract"] === "number"
+				? excelDateToJSDate(row["Start of Contract"])
+				: new Date(row["Start of Contract"]).toISOString().split("T")[0]
+			: "",
+		end_of_contract: row["End of Contract"]
+			? typeof row["End of Contract"] === "number"
+				? excelDateToJSDate(row["End of Contract"])
+				: new Date(row["End of Contract"]).toISOString().split("T")[0]
+			: "",
 		position: row["Position"] || "",
 		status: row["Status"] || "Employed",
 	});
@@ -133,7 +142,7 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 				if (value) {
 					const raw = value.replace(/\D/g, "");
 					if (!/^09\d{9}$/.test(raw))
-						return "Phone number must start with 09 and 9 digits after it";
+						return "Phone number must start with 09 and have 9 digits after it";
 				}
 				break;
 			case "postal_code":
@@ -195,6 +204,59 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 		});
 	};
 
+	const getAuthToken = () => {
+		const token = document.cookie
+			.split('; ')
+			.find(row => row.startsWith('employee_token=') || row.startsWith('admin_token='))
+			?.split('=')[1];
+		return token;
+	};
+
+	const handleManualSubmit = async () => {
+		setShowConfirm(false);
+		setIsSubmitting(true);
+
+		const token = getAuthToken();
+		const payload = preparePayload(formValues);
+
+		try {
+			const res = await fetch("http://192.168.1.9:3001/api/employees", {
+				method: "POST",
+				headers: { 
+					"Content-Type": "application/json",
+					"Authorization": token ? `Bearer ${token}` : ""
+				},
+				body: JSON.stringify(payload),
+			});
+			
+			const result = await res.json();
+			console.log("📥 Response received:", result);
+			
+			if (res.ok && result.success) {
+				console.log("✅ Employee added:", payload.fullname);
+				console.log("✅ Employee ID:", result.employee?.employee_id);
+				
+				if (pushData) pushData();
+
+				setFormValues({});
+				setFieldErrors({});
+				
+				setMessageType("success");
+				setMessageText(`Employee ${payload.fullname} added successfully!`);
+				setShowMessage(true);
+			} else {
+				throw new Error(result.error || 'Failed to add employee');
+			}
+		} catch (err) {
+			console.error("❌ Failed to add employee:", err);
+			setMessageType("error");
+			setMessageText(`Failed to add employee: ${err.message}`);
+			setShowMessage(true);
+		} finally {
+			setIsSubmitting(false);
+		}
+	};
+
 	const handleSubmit = async () => {
 		const allErrors = {};
 		Object.entries(formValues).forEach(([key, val]) => {
@@ -204,54 +266,101 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 		setFieldErrors(allErrors);
 		if (Object.keys(allErrors).length > 0) return;
 
-		const updatedRows = [...excelRows];
-		updatedRows[currentExcelIndex] = { ...updatedRows[currentExcelIndex], ...formValues };
-		setExcelRows(updatedRows);
+		// SCENARIO 1: Excel Import Mode
+		if (excelRows.length > 0) {
+			const updatedRows = [...excelRows];
+			updatedRows[currentExcelIndex] = { ...updatedRows[currentExcelIndex], ...formValues };
+			setExcelRows(updatedRows);
 
-		if (currentExcelIndex < excelRows.length - 1) {
-			const nextIndex = currentExcelIndex + 1;
-			setCurrentExcelIndex(nextIndex);
-			setFormValues(mapExcelRowToForm(updatedRows[nextIndex]));
-			setFieldErrors({});
-			return;
+			// If not the last row, move to next
+			if (currentExcelIndex < excelRows.length - 1) {
+				const nextIndex = currentExcelIndex + 1;
+				setCurrentExcelIndex(nextIndex);
+				setFormValues(mapExcelRowToForm(updatedRows[nextIndex]));
+				setFieldErrors({});
+				return;
+			}
+
+			// Last row reached - confirm batch submission
+			setConfirmAction(() => handleConfirmSubmit);
+			setShowConfirm(true);
+		} 
+		// SCENARIO 2: Manual Entry Mode
+		else {
+			setConfirmAction(() => handleManualSubmit);
+			setShowConfirm(true);
 		}
-
-		// set confirm modal with action
-		setConfirmAction(() => handleConfirmSubmit);
-		setShowConfirm(true);
 	};
 
 	const handleConfirmSubmit = async () => {
 		setShowConfirm(false);
 		setIsSubmitting(true);
 
+		const token = getAuthToken();
+		let successCount = 0;
+		let failCount = 0;
+		const errors = [];
+
 		for (const row of excelRows) {
 			const payload = preparePayload(mapExcelRowToForm(row));
 			try {
-				const res = await fetch("http://localhost:3001/api/employees", {
+				const res = await fetch("http://192.168.1.9:3001/api/employees", {
 					method: "POST",
-					headers: { "Content-Type": "application/json" },
+					headers: { 
+						"Content-Type": "application/json",
+						"Authorization": token ? `Bearer ${token}` : ""
+					},
 					body: JSON.stringify(payload),
 				});
+				
 				const result = await res.json();
-				if (!res.ok) console.error("Row import error:", result);
+				
+				if (res.ok) {
+					successCount++;
+					console.log("✅ Employee added:", payload.fullname);
+				} else {
+					failCount++;
+					errors.push(`${payload.fullname}: ${result.error || 'Unknown error'}`);
+					console.error("❌ Failed to add:", payload.fullname, result);
+				}
 			} catch (err) {
-				console.error("Fetch error for row:", payload.fullname, err);
+				failCount++;
+				errors.push(`${payload.fullname}: ${err.message}`);
+				console.error("❌ Fetch error for:", payload.fullname, err);
 			}
 		}
 
 		setIsSubmitting(false);
+		
+		if (pushData && successCount > 0) pushData();
+
+		// Reset form
 		setExcelRows([]);
 		setExcelFile(null);
 		setFormValues({});
-		setMessageText("All employees uploaded successfully!");
+		setFieldErrors({});
+		if (excelInputRef.current) excelInputRef.current.value = "";
+
+		// Show result message
+		if (failCount === 0) {
+			setMessageType("success");
+			setMessageText(`All ${successCount} employee(s) uploaded successfully!`);
+		} else if (successCount === 0) {
+			setMessageType("error");
+			setMessageText(`Failed to upload all employees:\n${errors.join('\n')}`);
+		} else {
+			setMessageType("warning");
+			setMessageText(`${successCount} succeeded, ${failCount} failed:\n${errors.join('\n')}`);
+		}
 		setShowMessage(true);
-		if (updateData) updateData();
 	};
 
 	const handleClose = () => {
 		setFormValues({});
 		setFieldErrors({});
+		setExcelRows([]);
+		setExcelFile(null);
+		if (excelInputRef.current) excelInputRef.current.value = "";
 		onClose();
 	};
 
@@ -259,6 +368,7 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 		const file = e.target.files[0];
 		if (!file) return;
 		if (!file.name.match(/\.(xls|xlsx)$/)) {
+			setMessageType("error");
 			setMessageText("Please upload a valid Excel file");
 			setShowMessage(true);
 			return;
@@ -287,6 +397,7 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 				return obj;
 			});
 			setExcelRows(rows);
+			setFieldErrors({});
 		};
 		reader.readAsArrayBuffer(file);
 	};
@@ -299,12 +410,22 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 
 		if (updated.length === 0) {
 			setFormValues({});
+			setExcelFile(null);
+			if (excelInputRef.current) excelInputRef.current.value = "";
 			return;
 		}
 
 		const newIndex = Math.min(currentExcelIndex, updated.length - 1);
 		setCurrentExcelIndex(newIndex);
 		setFormValues(mapExcelRowToForm(updated[newIndex]));
+	};
+
+	const handleClearExcel = () => {
+		setExcelRows([]);
+		setExcelFile(null);
+		setFormValues({});
+		setFieldErrors({});
+		if (excelInputRef.current) excelInputRef.current.value = "";
 	};
 
 	const fields = useMemo(() => {
@@ -410,8 +531,39 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 
 	return (
 		<ModalContainer title="Add Employee" width="3xl" variant="admin">
+			<div className="mb-4 flex flex-col items-start w-full gap-2">
+				<label className="block mb-1 font-medium">Import Excel:</label>
+				<div className="flex flex-row items-center gap-2 w-full">
+					<label
+						htmlFor="excelUpload"
+						className="cursor-pointer px-4 py-2 bg-white border border-gray-600 rounded-lg shadow hover:bg-gray-300 text-gray-700"
+					>
+						{excelFile ? "Change Excel File" : "Add Excel File"}
+					</label>
+					<input
+						type="file"
+						id="excelUpload"
+						ref={excelInputRef}
+						accept=".xls,.xlsx"
+						className="hidden"
+						onChange={handleExcelUpload}
+					/>
+					{excelFile && (
+						<>
+							<span className="text-sm text-gray-600">{excelFile.name}</span>
+							<button
+								onClick={handleClearExcel}
+								className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-sm"
+							>
+								Clear Excel
+							</button>
+						</>
+					)}
+				</div>
+			</div>
+
 			{excelRows.length > 0 && (
-				<div className="flex justify-between mt-4 items-center ">
+				<div className="flex justify-between mb-4 items-center bg-blue-50 p-3 rounded">
 					<button
 						onClick={handleDeleteCurrent}
 						className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg"
@@ -420,19 +572,18 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 					</button>
 
 					<div className="flex gap-2 items-center">
-						{/* Prev Button */}
 						<button
 							onClick={() => {
-							if (currentExcelIndex > 0) {
-								// Save current edits
-								const updatedRows = [...excelRows];
-								updatedRows[currentExcelIndex] = formValues;
-								setExcelRows(updatedRows);
+								if (currentExcelIndex > 0) {
+									const updatedRows = [...excelRows];
+									updatedRows[currentExcelIndex] = formValues;
+									setExcelRows(updatedRows);
 
-								const prevIndex = currentExcelIndex - 1;
-								setCurrentExcelIndex(prevIndex);
-								setFormValues(mapExcelRowToForm(updatedRows[prevIndex]));
-							}
+									const prevIndex = currentExcelIndex - 1;
+									setCurrentExcelIndex(prevIndex);
+									setFormValues(mapExcelRowToForm(updatedRows[prevIndex]));
+									setFieldErrors({});
+								}
 							}}
 							className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
 							disabled={currentExcelIndex === 0}
@@ -440,35 +591,26 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 							Prev
 						</button>
 
-						{/* Current Position */}
-						<span className="px-2">
-							[{currentExcelIndex + 1}]
-						</span>
+						<span className="px-2 font-semibold">[{currentExcelIndex + 1} of {excelRows.length}]</span>
 
-						{/* Next Button */}
 						<button
 							onClick={() => {
-							if (currentExcelIndex < excelRows.length - 1) {
-								// Save current edits
-								const updatedRows = [...excelRows];
-								updatedRows[currentExcelIndex] = formValues;
-								setExcelRows(updatedRows);
+								if (currentExcelIndex < excelRows.length - 1) {
+									const updatedRows = [...excelRows];
+									updatedRows[currentExcelIndex] = formValues;
+									setExcelRows(updatedRows);
 
-								const nextIndex = currentExcelIndex + 1;
-								setCurrentExcelIndex(nextIndex);
-								setFormValues(mapExcelRowToForm(updatedRows[nextIndex]));
-							}
+									const nextIndex = currentExcelIndex + 1;
+									setCurrentExcelIndex(nextIndex);
+									setFormValues(mapExcelRowToForm(updatedRows[nextIndex]));
+									setFieldErrors({});
+								}
 							}}
 							className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
 							disabled={currentExcelIndex >= excelRows.length - 1}
 						>
 							Next
 						</button>
-
-						{/* Range Label */}
-						<span className="ml-4 text-sm text-gray-600">
-							1 - {excelRows.length}
-						</span>
 					</div>
 				</div>
 			)}
@@ -479,48 +621,42 @@ export default function AddEmployeeModal({ isOpen, onClose, updateData }) {
 				onFieldChange={handleFieldChange}
 				onSubmit={handleSubmit}
 				disabled={isSubmitting}
-				submitText={isSubmitting ? "Adding..." : "Add Employee"}
+				submitText={
+					isSubmitting 
+						? "Adding..." 
+						: excelRows.length > 0 
+							? currentExcelIndex < excelRows.length - 1 
+								? "Save & Next" 
+								: "Submit All Employees"
+							: "Add Employee"
+				}
 				cancelText="Cancel"
 				onCancel={handleClose}
 				errorText={fieldErrors}
 			/>
 
-			<div className="mb-4 flex flex-col items-start w-full gap-2 mt-4">
-				<label className="block mb-1 font-medium">Import Excel:</label>
-				<div className="flex flex-row items-center gap-2 w-full">
-					<label
-						htmlFor="excelUpload"
-						className="cursor-pointer px-4 py-2 bg-white border border-gray-600 rounded-lg shadow hover:bg-gray-300 text-gray-700"
-					>
-						Add Excel File
-					</label>
-					<input
-						type="file"
-						id="excelUpload"
-						ref={excelInputRef}
-						accept=".xls,.xlsx"
-						className="hidden"
-						onChange={handleExcelUpload}
-					/>
-					{excelFile && <span className="text-sm text-gray-600">{excelFile.name}</span>}
-				</div>
-			</div>
-
-			{/* Confirm Modal */}
 			<ConfirmModal
 				isOpen={showConfirm}
 				title="Confirm Submission"
-				message="Are you sure you want to upload all employees?"
+				message={
+					excelRows.length > 0 
+						? `Are you sure you want to upload all ${excelRows.length} employees?` 
+						: "Are you sure you want to add this employee?"
+				}
 				onConfirm={() => confirmAction && confirmAction()}
 				onCancel={() => setShowConfirm(false)}
 			/>
 
-			{/* Message Modal */}
 			<MessageModal
 				isOpen={showMessage}
-				title="Notification"
+				title={messageType === "success" ? "Success" : messageType === "error" ? "Error" : "Warning"}
 				message={messageText}
-				onClose={() => setShowMessage(false)}
+				onClose={() => {
+					setShowMessage(false);
+					if (messageType === "success") {
+						handleClose();
+					}
+				}}
 			/>
 		</ModalContainer>
 	);

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useFetchData } from "./component/hooks/useFetchData";
 import { Card } from "./component/ui/card";
 import { Table } from "./component/data/table";
-import FingerprintLoginModal from "./component/modals/FingerprintLoginModal";
+import FingerprintEnrollModal from './component/modals/FingerprintEnrollModal';
 import {
   format,
   addWeeks,
@@ -17,25 +17,30 @@ import {
 
 function EmployeeDashboard() {
   const employeeId = localStorage.getItem("employeeId");
+  const employeeName = localStorage.getItem("fullname");
   const [currentWeek, setCurrentWeek] = useState(new Date());
 
   // Fingerprint modal state
   const [showFingerprintModal, setShowFingerprintModal] = useState(false);
 
   // Fetch fingerprint data
-  const { data: fingerprintData = [] } = useFetchData(
-    employeeId ? `http://localhost:3001/api/employee/fingerprints/${employeeId}` : null,
-    (res) => res
+  const { data: fingerprintData = [], loading: fingerprintLoading } = useFetchData(
+    employeeId 
+      ? `http://192.168.1.9:3001/api/fingerprint/employee/${employeeId}` 
+      : null
   );
 
   useEffect(() => {
-    if (fingerprintData && fingerprintData.length === 0) {
+    // Only show modal if data is loaded and no fingerprints exist
+    if (!fingerprintLoading && fingerprintData && fingerprintData.length === 0) {
       setShowFingerprintModal(true);
     }
-  }, [fingerprintData]);
+  }, [fingerprintData, fingerprintLoading]);
 
   const handleFingerprintSuccess = () => {
     setShowFingerprintModal(false);
+    // Reload the page to refresh fingerprint data
+    window.location.reload();
   };
 
   // Weekly Summary data
@@ -54,8 +59,7 @@ function EmployeeDashboard() {
 
   // Fetch employee schedule
   const { data: scheduleData = [] } = useFetchData(
-    `http://localhost:3001/api/employee/schedule/${employeeId}`,
-    (res) => res
+    `http://192.168.1.9:3001/api/employee/schedule/${employeeId}`
   );
 
   // Columns for Morning / Evening shifts
@@ -118,10 +122,11 @@ function EmployeeDashboard() {
   return (
     <div className="space-y-6">
       {showFingerprintModal && (
-        <FingerprintLoginModal
+        <FingerprintEnrollModal
           isOpen={showFingerprintModal}
           onSuccess={handleFingerprintSuccess}
           employeeId={employeeId}
+          employeeName={employeeName}
         />
       )}
 

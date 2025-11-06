@@ -16,7 +16,7 @@
     
     const fetchRequests = useCallback(async () => {
       try {
-        const res = await fetch("http://localhost:3001/api/employees/requests");
+        const res = await fetch("http://192.168.1.9:3001/api/employees/requests");
         if (!res.ok) throw new Error("Failed to fetch requests");
         const data = await res.json();
         setRequestData(data.data || []);

@@ -17,7 +17,7 @@ export default function RetrieveEmployeeModal({ isOpen, onClose, employeeId, upd
 	});
 
 	const { data: empContract } = useFetchData(
-		`http://localhost:3001/api/archive/contract/${employeeId}`,
+		`http://192.168.1.9:3001/api/archive/contract/${employeeId}`,
 		transformContract
 	);
 
@@ -29,7 +29,7 @@ export default function RetrieveEmployeeModal({ isOpen, onClose, employeeId, upd
 		setReadOnly(true);
 
 		let isMounted = true;
-		fetch(`http://localhost:3001/api/${api}/${employeeId}`)
+		fetch(`http://192.168.1.9:3001/api/${api}/${employeeId}`)
 			.then(res => res.json())
 			.then(emp => {
 				if (isMounted) setEmployee(emp);

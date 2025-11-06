@@ -34,7 +34,7 @@ export default function EmployeeLayout() {
 		const employeeId = localStorage.getItem("employeeId");
 		if (!employeeId) return;
 		try {
-			const res = await fetch(`http://localhost:3001/api/employee/notification/${employeeId}`);
+			const res = await fetch(`http://192.168.1.9:3001/api/employee/notification/${employeeId}`);
 			const data = await res.json();
 			if (data.success) setNotificationCount(data.count);
 		} catch (err) {
@@ -144,7 +144,7 @@ export default function EmployeeLayout() {
 		if (!confirm) return;
 
 		try {
-			const res = await fetch("http://localhost:3001/api/employee/change-password", {
+			const res = await fetch("http://192.168.1.9:3001/api/employee/change-password", {
 				method: "PUT",
 				headers: {
 					"Content-Type": "application/json",
@@ -174,7 +174,7 @@ export default function EmployeeLayout() {
 		if (!employeeId) return;
 
 		try {
-			const res = await fetch(`http://localhost:3001/api/employee/notification/reset/${employeeId}`, {
+			const res = await fetch(`http://192.168.1.9:3001/api/employee/notification/reset/${employeeId}`, {
 				method: "PUT",
 			});
 			const data = await res.json();

@@ -23,7 +23,7 @@ export const SocketProvider = ({ children }) => {
     if (socketRef.current) return;
 
     // Initialize socket connection
-    const newSocket = io("http://localhost:3001", {
+    const newSocket = io("http://192.168.1.9:3001", {
       transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionDelay: 1000,
@@ -109,4 +109,4 @@ export const SocketProvider = ({ children }) => {
       {children}
     </SocketContext.Provider>
   );
-};
+};  

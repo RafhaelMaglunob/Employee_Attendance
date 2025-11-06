@@ -39,12 +39,13 @@ export function employeeController(pool) {
     };
 
     const addEmployee = async (req, reply) => {
-        const {
+        const { 
             fullname, nickname, email, position, employment_type, status, gender,
             contact, marital_status, birthday, address, sss_number, pagibig, philhealth,
             emergency_name, relationship, emergency_address, emergency_contact,
             city, postal_code, gcash_no,
-            start_of_contract, end_of_contract
+            start_of_contract, end_of_contract,
+            require_fingerprint = false  // Optional flag
         } = req.body;
         
         const trim = v => (typeof v === "string" ? v.trim() : v);
@@ -52,32 +53,33 @@ export function employeeController(pool) {
 
         const d = {
             fullname: trim(fullname),
-            nickname: trim(nickname),
+            nickname: trim(nickname) || null,
             email: trim(email),
-            position: trim(position),
+            position: trim(position) || null,
             employment_type: trim(employment_type),
-            status: trim(status),
+            status: trim(status) || 'Employed',
             gender: trim(gender),
             contact: phone(contact),
-            marital_status: trim(marital_status),
+            marital_status: trim(marital_status) || null,
             birthday: trim(birthday),
-            address: trim(address),
-            sss_number: trim(sss_number),
-            pagibig: trim(pagibig),
-            philhealth: trim(philhealth),
-            emergency_name: trim(emergency_name),
-            relationship: trim(relationship),
-            emergency_address: trim(emergency_address),
+            address: trim(address) || null,
+            sss_number: trim(sss_number) || null,
+            pagibig: trim(pagibig) || null,
+            philhealth: trim(philhealth) || null,
+            emergency_name: trim(emergency_name) || null,
+            relationship: trim(relationship) || null,
+            emergency_address: trim(emergency_address) || null,
             emergency_contact: phone(emergency_contact),
-            city: trim(city),
-            postal_code: trim(postal_code),
+            city: trim(city) || null,
+            postal_code: trim(postal_code) || null,
             gcash_no: phone(gcash_no),
-            start_of_contract: trim(start_of_contract),
-            end_of_contract: trim(end_of_contract)
+            start_of_contract: trim(start_of_contract) || null,
+            end_of_contract: trim(end_of_contract) || null
         };
 
-        if (!d.fullname || !d.email || !d.employment_type || !d.gender) {
-            return reply.status(400).send({ error: "Required fields missing." });
+        // Validate required fields
+        if (!d.fullname || !d.email || !d.employment_type || !d.gender || !d.birthday) {
+            return reply.status(400).send({ error: "Required fields missing (fullname, email, employment_type, gender, birthday)." });
         }
 
         const tempPassword = `${d.fullname.split(" ")[0]?.toUpperCase()}-${new Date(d.birthday).getFullYear()}`;
@@ -93,35 +95,85 @@ export function employeeController(pool) {
         try {
             await client.query("BEGIN");
 
+            // Check for duplicates
             const check = await client.query(`
                 SELECT 1 FROM employee_registry WHERE email = $1 OR fullname = $2
             `, [d.email, d.fullname]);
 
             if (check.rowCount > 0) {
                 await client.query("ROLLBACK");
-                return reply.status(400).send({ error: "Employee already exists." });
+                return reply.status(400).send({ error: "Employee with this email or name already exists." });
             }
 
+            // 1. Insert into employee_registry
             const registry = await client.query(`
                 INSERT INTO employee_registry (email, fullname)
                 VALUES ($1, $2)
-                RETURNING id, email, fullname
+                RETURNING *
             `, [d.email, d.fullname]);
+            
+            if (!registry.rows || registry.rows.length === 0) {
+                throw new Error("Failed to create employee registry entry");
+            }
             const registryRow = registry.rows[0];
             
+            // 2. Insert into employees
             const empRes = await client.query(`
                 INSERT INTO employees
                 (registry_id, fullname, nickname, email, position, employment_type, status, gender, contact, marital_status, birthday, address, sss_number, pagibig, philhealth)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                 RETURNING *
             `, [
-                registryRow.id, d.fullname, d.nickname, d.email, d.position || '',
-                d.employment_type, d.status, d.gender, d.contact,
-                d.marital_status, d.birthday, d.address, d.sss_number,
-                d.pagibig, d.philhealth
+                registryRow.id, 
+                d.fullname, 
+                d.nickname, 
+                d.email, 
+                d.position,
+                d.employment_type, 
+                d.status, 
+                d.gender, 
+                d.contact,
+                d.marital_status, 
+                d.birthday, 
+                d.address, 
+                d.sss_number,
+                d.pagibig, 
+                d.philhealth
             ]);
+            
+            if (!empRes.rows || empRes.rows.length === 0) {
+                throw new Error("Failed to create employee record");
+            }
             const employee = empRes.rows[0];
+            
+            console.log("✅ Employee created with ID:", employee.employee_id);
 
+            // 3. Insert employee_dependents (Emergency Contact)
+            let dependent = null;
+            if (d.emergency_name || d.emergency_contact) {
+                const depRes = await client.query(`
+                    INSERT INTO employee_dependents 
+                    (employee_id, fullname, relationship, address, contact, city, postalcode, gcash_number)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    RETURNING *
+                `, [
+                    employee.employee_id,
+                    d.emergency_name,
+                    d.relationship,
+                    d.emergency_address,
+                    d.emergency_contact,
+                    d.city,
+                    d.postal_code,
+                    d.gcash_no
+                ]);
+                
+                if (depRes.rows && depRes.rows.length > 0) {
+                    dependent = depRes.rows[0];
+                    console.log("✅ Dependent created for employee:", employee.employee_id);
+                }
+            }
+
+            // 4. Insert required documents
             const docTypes = ['SSS ID', 'Resume/CV', 'Pag-Ibig', 'PhilHealth', 'Barangay Clearance'];
             const docsToSync = [];
             for (const type of docTypes) {
@@ -130,35 +182,71 @@ export function employeeController(pool) {
                     VALUES ($1, $2, 'Incomplete', NOW(), NOW())
                     RETURNING *
                 `, [employee.employee_id, type]);
-                docsToSync.push(res.rows[0]);
+                
+                if (res.rows && res.rows.length > 0) {
+                    docsToSync.push(res.rows[0]);
+                }
             }
+            console.log("✅ Documents created:", docsToSync.length);
 
+            // 5. Insert employee_notifications
             const empNotif = await client.query(`
                 INSERT INTO employee_notifications(employee_id, count)
                 VALUES ($1, 0)
                 RETURNING *
             `, [employee.employee_id]);
-            const notification = empNotif.rows[0];
+            
+            const notification = empNotif.rows && empNotif.rows.length > 0 ? empNotif.rows[0] : null;
 
+            // 6. Insert into users
             const userRes = await client.query(`
                 INSERT INTO users (employee_id, email, fullname, role, password, must_change_password)
-                VALUES ($1,$2,$3,$4,$5,true)
+                VALUES ($1, $2, $3, $4, $5, true)
                 RETURNING *
-            `, [employee.employee_id, d.email, d.fullname, d.position, hashedPassword]);
-            const user = userRes.rows[0];
+            `, [employee.employee_id, d.email, d.fullname, d.position || 'Crew', hashedPassword]);
             
+            if (!userRes.rows || userRes.rows.length === 0) {
+                throw new Error("Failed to create user account");
+            }
+            const user = userRes.rows[0];
+            console.log("✅ User account created:", user.account_id);
+            
+            // 7. Insert employee_contracts
             const startDate = d.start_of_contract || new Date().toISOString().split("T")[0];
+            const endDate = d.employment_type === "Part-Time" ? d.end_of_contract : null;
+            
             const contractRes = await client.query(`
                 INSERT INTO employee_contracts (employee_id, start_of_contract, end_of_contract, contract_type)
                 VALUES ($1, $2, $3, $4)
                 RETURNING *
-            `, [employee.employee_id, startDate, d.end_of_contract || null, d.employment_type || null]);
+            `, [employee.employee_id, startDate, endDate, d.employment_type]);
+            
+            if (!contractRes.rows || contractRes.rows.length === 0) {
+                throw new Error("Failed to create employee contract");
+            }
             const contractRow = contractRes.rows[0];
+            console.log("✅ Contract created:", contractRow.contract_id);
             
             await client.query("COMMIT");
+            console.log("✅ Transaction committed successfully");
 
             // Send response to UI first
-            reply.send({ success: true, employee });
+            const responseData = {
+                success: true, 
+                employee: {
+                    ...employee,
+                    emergency_name: dependent?.fullname || null,
+                    relationship: dependent?.relationship || null,
+                    emergency_address: dependent?.address || null,
+                    emergency_contact: dependent?.contact || null,
+                    city: dependent?.city || null,
+                    postal_code: dependent?.postalcode || null,
+                    gcash_no: dependent?.gcash_number || null
+                }
+            };
+            
+            console.log("📤 Sending response:", JSON.stringify(responseData, null, 2));
+            reply.send(responseData);
 
             // Background sync with error handling
             setImmediate(async () => {
@@ -174,18 +262,28 @@ export function employeeController(pool) {
                     console.error("❌ Supabase sync error (employees):", err.message);
                 }
 
+                if (dependent) {
+                    try {
+                        await syncRow('employee_dependents', dependent, 'id');
+                    } catch (err) {
+                        console.error("❌ Supabase sync error (employee_dependents):", err.message);
+                    }
+                }
+
                 for (const doc of docsToSync) {
                     try {
-                        await syncRow('employee_documents', doc, 'id');
+                        await syncRow('employee_documents', doc, 'document_id');
                     } catch (err) {
                         console.error("❌ Supabase sync error (employee_documents):", err.message);
                     }
                 }
 
-                try {
-                    await syncRow('employee_notifications', notification, 'employee_id');
-                } catch (err) {
-                    console.error("❌ Supabase sync error (employee_notifications):", err.message);
+                if (notification) {
+                    try {
+                        await syncRow('employee_notifications', notification, 'employee_id');
+                    } catch (err) {
+                        console.error("❌ Supabase sync error (employee_notifications):", err.message);
+                    }
                 }
 
                 try {
@@ -200,12 +298,25 @@ export function employeeController(pool) {
                     console.error("❌ Supabase sync error (employee_contracts):", err.message);
                 }
 
-                sendEmployeeEmail(d.email, d.fullname, tempPassword).catch(() => {});
+                // Send email notification
+                sendEmployeeEmail(d.email, d.fullname, tempPassword).catch((err) => {
+                    console.warn("⚠️ Email notification failed:", err.message);
+                });
             });
+            
         } catch (err) {
             await client.query("ROLLBACK");
-            console.error(err);
-            return reply.status(500).send({ error: "Failed to add employee" });
+            console.error("❌ Add employee transaction failed:", err);
+            console.error("Error details:", {
+                message: err.message,
+                stack: err.stack,
+                code: err.code
+            });
+            
+            return reply.status(500).send({ 
+                error: "Failed to add employee", 
+                details: err.message 
+            });
         } finally {
             client.release();
         }
@@ -618,6 +729,140 @@ export function employeeController(pool) {
         }
     };
 
+    const getFingerprintAttendance = async (req, reply) => {
+        try {
+            const result = await pool.query(`
+                WITH RankedLogs AS (
+                    SELECT 
+                        fal.log_id,
+                        fal.employee_id,
+                        e.fullname AS employee_name,
+                        fal.clock_type,
+                        fal.clock_time,
+                        fal.device_id,
+                        fal.confidence_score,
+                        DATE(fal.clock_time) AS log_date,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY fal.employee_id, DATE(fal.clock_time), fal.clock_type 
+                            ORDER BY fal.clock_time DESC
+                        ) AS rn
+                    FROM fingerprint_attendance_log fal
+                    JOIN employees e ON fal.employee_id = e.employee_id
+                ),
+                ClockIns AS (
+                    SELECT 
+                        employee_id,
+                        employee_name,
+                        log_date,
+                        clock_time AS clock_in,
+                        confidence_score AS clock_in_confidence
+                    FROM RankedLogs
+                    WHERE clock_type = 'IN' AND rn = 1
+                ),
+                ClockOuts AS (
+                    SELECT 
+                        employee_id,
+                        log_date,
+                        clock_time AS clock_out,
+                        confidence_score AS clock_out_confidence
+                    FROM RankedLogs
+                    WHERE clock_type = 'OUT' AND rn = 1
+                )
+                SELECT 
+                    ci.employee_id,
+                    ci.employee_name,
+                    TO_CHAR(ci.log_date, 'YYYY-MM-DD') AS date,
+                    TO_CHAR(ci.clock_in, 'HH12:MI AM') AS clock_in,
+                    TO_CHAR(co.clock_out, 'HH12:MI AM') AS clock_out,
+                    ci.clock_in_confidence,
+                    co.clock_out_confidence,
+                    CASE 
+                        WHEN co.clock_out IS NOT NULL THEN
+                            EXTRACT(EPOCH FROM (co.clock_out - ci.clock_in))/3600
+                        ELSE NULL
+                    END AS hours_worked
+                FROM ClockIns ci
+                LEFT JOIN ClockOuts co 
+                    ON ci.employee_id = co.employee_id 
+                    AND ci.log_date = co.log_date
+                ORDER BY ci.log_date DESC, ci.employee_name ASC;
+            `);
+
+            return { success: true, data: result.rows };
+        } catch (err) {
+            console.error("Database Error:", err.message);
+            reply.status(500).send({ error: "Failed to fetch fingerprint attendance" });
+        }
+    };
+
+    const getFingerprintAttendanceByDate = async (req, reply) => {
+        const { date } = req.params;
+        
+        try {
+            const result = await pool.query(`
+                WITH RankedLogs AS (
+                    SELECT 
+                        fal.log_id,
+                        fal.employee_id,
+                        e.fullname AS employee_name,
+                        fal.clock_type,
+                        fal.clock_time,
+                        fal.confidence_score,
+                        DATE(fal.clock_time) AS log_date,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY fal.employee_id, DATE(fal.clock_time), fal.clock_type 
+                            ORDER BY fal.clock_time DESC
+                        ) AS rn
+                    FROM fingerprint_attendance_log fal
+                    JOIN employees e ON fal.employee_id = e.employee_id
+                    WHERE DATE(fal.clock_time) = $1
+                ),
+                ClockIns AS (
+                    SELECT 
+                        employee_id,
+                        employee_name,
+                        log_date,
+                        clock_time AS clock_in,
+                        confidence_score AS clock_in_confidence
+                    FROM RankedLogs
+                    WHERE clock_type = 'IN' AND rn = 1
+                ),
+                ClockOuts AS (
+                    SELECT 
+                        employee_id,
+                        log_date,
+                        clock_time AS clock_out,
+                        confidence_score AS clock_out_confidence
+                    FROM RankedLogs
+                    WHERE clock_type = 'OUT' AND rn = 1
+                )
+                SELECT 
+                    ci.employee_id,
+                    ci.employee_name,
+                    TO_CHAR(ci.log_date, 'YYYY-MM-DD') AS date,
+                    TO_CHAR(ci.clock_in, 'HH12:MI AM') AS clock_in,
+                    TO_CHAR(co.clock_out, 'HH12:MI AM') AS clock_out,
+                    ci.clock_in_confidence,
+                    co.clock_out_confidence,
+                    CASE 
+                        WHEN co.clock_out IS NOT NULL THEN
+                            EXTRACT(EPOCH FROM (co.clock_out - ci.clock_in))/3600
+                        ELSE NULL
+                    END AS hours_worked
+                FROM ClockIns ci
+                LEFT JOIN ClockOuts co 
+                    ON ci.employee_id = co.employee_id 
+                    AND ci.log_date = co.log_date
+                ORDER BY ci.employee_name ASC;
+            `, [date]);
+
+            return { success: true, data: result.rows };
+        } catch (err) {
+            console.error("Database Error:", err.message);
+            reply.status(500).send({ error: "Failed to fetch fingerprint attendance by date" });
+        }
+    };
+
     return {
         getAllEmployees,
         addEmployee,
@@ -626,6 +871,8 @@ export function employeeController(pool) {
         updateEmployee,
         deleteEmployee,
         getAllEmployeeRequests,
-        updateEmployeeRequest
+        updateEmployeeRequest,
+        getFingerprintAttendance,
+        getFingerprintAttendanceByDate
     };
 }

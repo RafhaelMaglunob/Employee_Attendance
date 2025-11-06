@@ -18,7 +18,7 @@ function EmployeeLogin() {
     }, [navigate]);
 
     const handleLogin = async () => {
-        const res = await fetch("http://localhost:3001/api/employee-login", {
+        const res = await fetch("http://192.168.1.9:3001/api/employee-login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, password }),

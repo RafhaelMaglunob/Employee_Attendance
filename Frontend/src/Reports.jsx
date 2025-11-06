@@ -10,7 +10,7 @@ function Reports() {
 
     // Fetch attendance
     const { data: attendanceData, loading: attendanceLoading } = useFetchData(
-        'http://localhost:3001/api/attendance',
+        'http://192.168.1.9:3001/api/attendance',
         emp => ({
             employee_name: emp.employee_name,
             clock_in: emp.clock_in,
@@ -22,7 +22,7 @@ function Reports() {
 
     // Fetch incidents
     const { data: incidentData, loading: incidentLoading } = useFetchData(
-        'http://localhost:3001/api/incidents',
+        'http://192.168.1.9:3001/api/incidents',
         emp => ({
             incident_id: emp.incident_id,
             employee_name: emp.employee_name,

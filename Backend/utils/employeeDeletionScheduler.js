@@ -12,7 +12,7 @@ const getDeletionTime = (deletionDate) => {
         : DateTime.fromISO(deletionDate, { zone: 'Asia/Manila' });
 
     if (!dt.isValid) return null;
-    return dt.set({ hour: 10, minute: 0, second: 0, millisecond: 0 });
+    return dt.set({ hour: 10, minute: 0, second: 0  , millisecond: 0 });
 };
 
 export const deleteEmployeeNow = async (pool, employee) => {
@@ -69,8 +69,8 @@ export const deleteEmployeeNow = async (pool, employee) => {
         // --- Archive documents ---
         const { rows: archivedDocs } = await client.query(`
             INSERT INTO employee_documents_archive
-            (document_id, employee_id, sss_id, resume_cv, pagibig, philhealth, barangay_clearance)
-            SELECT document_id, employee_id, sss_id, resume_cv, pagibig, philhealth, barangay_clearance
+            (document_id, employee_id, document_type, link, status)
+            SELECT document_id, employee_id, document_type, link, status
             FROM employee_documents
             WHERE employee_id = $1
             RETURNING *

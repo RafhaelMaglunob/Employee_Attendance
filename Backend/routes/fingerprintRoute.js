@@ -3,7 +3,7 @@ import { fingerprintController } from '../controllers/fingerprintController.js';
 export async function fingerprintRoutes(fastify, options) {
     const fingerprint = fingerprintController(fastify.pg);
 
-    // Get occupied fingerprint slots
+    // Get occupied fingerprint slots (no auth required for checking)
     fastify.get('/fingerprint/occupied-slots', async (req, reply) => {
         return fingerprint.getOccupiedSlots(req, reply);
     });
@@ -15,7 +15,7 @@ export async function fingerprintRoutes(fastify, options) {
         return fingerprint.startEnrollment(req, reply);
     });
 
-    // Get enrollment status (polling endpoint)
+    // Get enrollment status (polling endpoint - no auth to avoid token issues during polling)
     fastify.get('/fingerprint/enroll-status', async (req, reply) => {
         return fingerprint.getEnrollmentStatus(req, reply);
     });
@@ -51,5 +51,38 @@ export async function fingerprintRoutes(fastify, options) {
         preHandler: [fastify.authenticate]
     }, async (req, reply) => {
         return fingerprint.getFingerprintLogs(req, reply);
+    });
+
+    fastify.get('/fingerprint/admin/employees', async (req, reply) => {
+        return fingerprint.getEmployeesWithFingerprintStatus(req, reply);
+    });
+
+    fastify.post('/fingerprint/enroll-digital', {
+        preHandler: [fastify.authenticate]
+    }, async (req, reply) => {
+        return fingerprint.enrollDigitalFingerprint(req, reply);
+    });
+
+    // Validate fingerprint existence
+    fastify.get('/fingerprint/validate', {
+        preHandler: [fastify.authenticate]
+    }, async (req, reply) => {
+        return fingerprint.validateFingerprint(req, reply);
+    });
+
+    fastify.get('/fingerprint/validate/:slot', {
+        preHandler: [fastify.authenticate]
+    }, async (req, reply) => {
+        return fingerprint.validateHardwareFingerprint(req, reply);
+    });
+    fastify.get('/fingerprint/sync/check', {
+        preHandler: [fastify.authenticate]
+    }, async (req, reply) => {
+        return fingerprint.syncCheck(req, reply);
+    });
+    fastify.get('/fingerprint/hardware/:slot', {
+        preHandler: [fastify.authenticate]
+    }, async (req, reply) => {
+        return fingerprint.clearHardwareSlot(req, reply);
     });
 }

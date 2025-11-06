@@ -51,7 +51,7 @@ export default function RenewContractModal({ isOpen, onClose, employeeId, update
 		};
 
 		// Fire-and-forget
-		fetch(`http://localhost:3001/api/archive/${employeeId}`, {
+		fetch(`http://192.168.1.9:3001/api/archive/${employeeId}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify(body),

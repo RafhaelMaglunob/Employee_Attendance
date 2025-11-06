@@ -15,6 +15,7 @@ import Incident from "./Incident.jsx";
 import Scheduling from "./Scheduling.jsx";
 import Attendance from "./Attendance.jsx";
 import Approval from "./Approval.jsx";
+import AdminFingerprintManager from "./AdminFingerprintManager.jsx";
 
 import EmployeeLogin from "./EmployeeLogin.jsx";
 import EmployeeDashboard from "./EmployeeDashboard.jsx";
@@ -46,6 +47,7 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="employees" element={<Employees />} />
+            <Route path="fingerprint" element={<AdminFingerprintManager />} />
             <Route path="audit" element={<Auditing />} />
             <Route path="salary" element={<Salary />} />
             <Route path="incident" element={<Incident />} />

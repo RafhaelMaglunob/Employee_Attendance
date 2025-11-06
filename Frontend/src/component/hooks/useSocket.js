@@ -5,7 +5,7 @@ export function useSocket() {
   const socketRef = useRef(null);
 
   if (!socketRef.current) {
-    socketRef.current = io("http://localhost:3001", { autoConnect: false });
+    socketRef.current = io("http://192.168.1.9:3001", { autoConnect: false });
     socketRef.current.connect();
   }
 

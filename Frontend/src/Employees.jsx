@@ -95,7 +95,7 @@ function Employees() {
 	});
 
 	const { data, loading, pushData, updateData } = useFetchData(
-		`http://localhost:3001/api/${api}`,
+		`http://192.168.1.9:3001/api/${api}`,
 		transformEmployee
 	);
 

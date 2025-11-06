@@ -27,7 +27,7 @@ export default function DeleteEmployeeModal({ isOpen, onClose, employeeId, updat
 		try {
 			const status = statusType === "Termination" ? "Termination" : "Resignation";
 
-			const res = await fetch(`http://localhost:3001/api/employees/${employeeId}`, {
+			const res = await fetch(`http://192.168.1.9:3001/api/employees/${employeeId}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ status, deletion_date: deletionDate }),

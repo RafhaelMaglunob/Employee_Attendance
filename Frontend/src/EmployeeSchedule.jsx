@@ -26,7 +26,7 @@ const EmployeeSchedule = () => {
     }, [weekStart]);
 
     const { data: scheduleData = [] } = useFetchData(
-        `http://localhost:3001/api/employee/schedule/${employeeId}`,
+        `http://192.168.1.9:3001/api/employee/schedule/${employeeId}`,
         (res) => res
     );
 
@@ -102,7 +102,7 @@ const EmployeeSchedule = () => {
 
             await Promise.all(
                 payload.map(item =>
-                    fetch('http://localhost:3001/api/employee/availability', {
+                    fetch('http://192.168.1.9:3001/api/employee/availability', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(item),

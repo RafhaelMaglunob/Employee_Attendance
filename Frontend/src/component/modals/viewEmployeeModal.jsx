@@ -21,7 +21,7 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
     });
 
     const { data: empContract, loading: contractLoading } = useFetchData(
-        `http://localhost:3001/api/employees/contract/${employeeId}`,
+        `http://192.168.1.9:3001/api/employees/contract/${employeeId}`,
         transformContract
     );
 
@@ -35,7 +35,7 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
 
         let isMounted = true;
 
-        fetch(`http://localhost:3001/api/${api}/${employeeId}`)
+        fetch(`http://192.168.1.9:3001/api/${api}/${employeeId}`)
             .then((res) => {
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 return res.json();
@@ -250,7 +250,7 @@ export default function ViewEmployeeModal({ isOpen, onClose, employeeId, updateD
         }
 
         try {
-            const res = await fetch(`http://localhost:3001/api/${api}/${employeeId}`, {
+            const res = await fetch(`http://192.168.1.9:3001/api/${api}/${employeeId}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),

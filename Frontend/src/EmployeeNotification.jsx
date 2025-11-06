@@ -40,7 +40,7 @@ function EmployeeNotification() {
 	const fetchNotifications = async () => {
 		try {
 			setLoading(true);
-			const res = await fetch(`http://localhost:3001/api/employee/notifications/${employeeId}`);
+			const res = await fetch(`http://192.168.1.9:3001/api/employee/notifications/${employeeId}`);
 			const data = await res.json();
 			if (data.success) {
 				setNotifications(data.notifications);
@@ -55,7 +55,7 @@ function EmployeeNotification() {
 
 	const markAsRead = async (notificationId) => {
 		try {
-			await fetch(`http://localhost:3001/api/employee/notifications/${notificationId}/read`, {
+			await fetch(`http://192.168.1.9:3001/api/employee/notifications/${notificationId}/read`, {
 				method: "PUT"
 			});
 			
@@ -198,7 +198,7 @@ function EmployeeNotification() {
 					<button
 						onClick={async () => {
 							try {
-								await fetch(`http://localhost:3001/api/employee/notifications/${employeeId}/clear-read`, {
+								await fetch(`http://192.168.1.9:3001/api/employee/notifications/${employeeId}/clear-read`, {
 									method: "DELETE"
 								});
 								setNotifications(prev => prev.filter(n => !n.is_read));

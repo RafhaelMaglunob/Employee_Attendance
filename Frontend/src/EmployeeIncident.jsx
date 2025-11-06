@@ -65,7 +65,7 @@ export default function EmployeeIncident() {
   const fetchIncidents = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:3001/api/employee/${employeeId}/incidents`);
+      const res = await fetch(`http://192.168.1.9:3001/api/employee/${employeeId}/incidents`);
       const data = await res.json();
       if (data.success) setIncidents(data.data);
     } catch (err) {
@@ -78,7 +78,7 @@ export default function EmployeeIncident() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:3001/api/incidents', {
+      const res = await fetch('http://192.168.1.9:3001/api/incidents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -110,7 +110,7 @@ export default function EmployeeIncident() {
     if (!window.confirm("Are you sure you want to delete this incident?")) return;
 
     try {
-      const res = await fetch(`http://localhost:3001/api/incidents/${incidentId}`, {
+      const res = await fetch(`http://192.168.1.9:3001/api/incidents/${incidentId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
       });

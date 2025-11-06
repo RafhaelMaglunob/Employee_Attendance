@@ -368,5 +368,62 @@ CREATE TABLE employee_deletion_schedule (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Add fingerprint table to your existing schema
+
+-- Fingerprint Registration Table
+CREATE TABLE employee_fingerprints (
+    fingerprint_id SERIAL PRIMARY KEY,
+    employee_id TEXT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+    fingerprint_slot INT NOT NULL UNIQUE,      -- Sensor slot index
+    fingerprint_data JSONB,                    -- Stores digital template if used
+    enrollment_type VARCHAR(20) DEFAULT 'hardware', -- 'hardware' or 'digital'
+    registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_used TIMESTAMP,
+    status VARCHAR(20) DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive', 'Deleted')),
+    UNIQUE(employee_id, fingerprint_slot)
+);
+
+
+-- Fingerprint Attendance Log (separate from main attendance)
+CREATE TABLE fingerprint_attendance_log (
+    log_id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees(employee_id) ON DELETE CASCADE,
+    fingerprint_slot INT,
+    clock_type VARCHAR(10) CHECK (clock_type IN ('IN', 'OUT')),
+    clock_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    device_id VARCHAR(50), -- If you have multiple Arduino devices
+    confidence_score INT -- Fingerprint match confidence (0-255)
+);
+
+-- Index for faster queries
+CREATE INDEX idx_fingerprint_employee ON employee_fingerprints(employee_id);
+CREATE INDEX idx_fingerprint_slot ON employee_fingerprints(fingerprint_slot);
+CREATE INDEX idx_fp_attendance_employee ON fingerprint_attendance_log(employee_id);
+CREATE INDEX idx_fp_attendance_date ON fingerprint_attendance_log(clock_time);
+
+-- Archive table
+CREATE TABLE employee_fingerprints_archive (
+    fingerprint_id SERIAL PRIMARY KEY,
+    employee_id TEXT REFERENCES employees_archive(employee_id) ON DELETE CASCADE,
+    fingerprint_slot INT NOT NULL,
+    registered_at TIMESTAMP,
+    last_used TIMESTAMP,
+    status VARCHAR(20)
+);
+
+-- Comments
+COMMENT ON TABLE employee_fingerprints IS 'Stores fingerprint registration data linked to Arduino sensor slots';
+COMMENT ON COLUMN employee_fingerprints.fingerprint_slot IS 'Physical slot number in Arduino fingerprint sensor (0-127 for AS608)';
+COMMENT ON TABLE fingerprint_attendance_log IS 'Raw fingerprint clock in/out events before processing into employee_attendance';
+
 ALTER TABLE employee_schedule
 ADD CONSTRAINT uniq_employee_day UNIQUE (employee_id, work_date);
+-- Add availability_disabled column to employees table
+ALTER TABLE employees 
+ADD COLUMN IF NOT EXISTS availability_disabled BOOLEAN DEFAULT FALSE;
+
+-- Add comments
+COMMENT ON COLUMN employees.availability_disabled IS 'When true, full-time employee will be excluded from auto-scheduling';
+
+-- Update existing employees to have this set to false by default
+UPDATE employees SET availability_disabled = FALSE WHERE availability_disabled IS NULL;

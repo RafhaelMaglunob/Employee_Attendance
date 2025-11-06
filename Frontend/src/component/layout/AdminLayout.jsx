@@ -10,6 +10,7 @@ import Cookies from "js-cookie";
 const sidebar = [
   {name: "Dashboard", src: "../img/Dashboard_Icon.png", alt:"Dashboard Icon", path: "dashboard"},
   {name: "Employees", src: "../img/Employees_Icon.png", alt:"Employees Icon", path: "employees"},
+  {name: "Fingerprint", src: "../img/Employees_Icon.png", alt:"Employees Icon", path: "fingerprint"},
   {name: "Auditing", src: "../img/Auditing_Icon.png", alt:"Auditing Icon", path: "audit"},
   {name: "Salary", src: "../img/Salary_Icon.png", alt:"Salary Icon", path: "salary"},
   {name: "Incidents", src: "../img/Incidents_Icon.png", alt:"Incidents Icon", path: "incident"},
@@ -29,8 +30,8 @@ export default function AdminLayout() {
   const currentPath = location.pathname.split("/")[1] || "dashboard";
   const [path, setPath] = useState(currentPath);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const Admin_buttonPath = ["Dashboard", "Employees", "Auditing", "Salary", "Incidents", "Reports", "Approvals", "Scheduling"]
-  const HR_buttonPath = ["Dashboard", "Employees", "Auditing", "Salary", "Incidents", "Reports", "Approvals"]
+  const Admin_buttonPath = ["Dashboard", "Employees", "Fingerprint", "Auditing", "Salary", "Incidents", "Reports", "Approvals", "Scheduling"]
+  const HR_buttonPath = ["Dashboard", "Employees", "Fingerprint", "Auditing", "Salary", "Incidents", "Reports", "Approvals"]
   const HeadStaff_buttonPath = ["Dashboard","Scheduling", "Attendance"];
 
   const filteredSidebar = sidebar.filter(item => {
@@ -52,7 +53,7 @@ export default function AdminLayout() {
   }, [currentPath]);
 
   const handleLogout = async () => {
-    Cookies.remove("auth_token");
+    Cookies.remove("admin_token");
     localStorage.removeItem("buttonPath");
     localStorage.removeItem("userRole");
     localStorage.removeItem("userEmail");
@@ -94,7 +95,7 @@ export default function AdminLayout() {
                 <img
                   src={item.src}
                   alt={item.alt}
-                  className={`${userRole === "admin" ? "brightness-1000" : ""}`}
+                  className={`${userRole === "admin" ? "brightness-1000 w-6 h-6" : ""}`}
                 />
                 <p>{item.name}</p>
               </Button>

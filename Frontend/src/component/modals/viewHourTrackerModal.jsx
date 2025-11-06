@@ -13,7 +13,7 @@ export default function ViewHourTrackerModal({ isOpen, onClose, hoursTrackerId, 
 
         let isMounted = true;
 
-        fetch(`http://localhost:3001/api/work-logs/${hoursTrackerId}?pay_period=${hourTrackerPeriod}`)
+        fetch(`http://192.168.1.9:3001/api/work-logs/${hoursTrackerId}?pay_period=${hourTrackerPeriod}`)
             .then(res => {
                 if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
                 return res.json();

@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = "http://localhost:3001/api/employees"; 
+const API_URL = "http://192.168.1.9:3001/api/employees"; 
 const TOTAL_REQUESTS = 200;  // total inserts
 const CONCURRENCY = 20;      // number of simultaneous requests
 

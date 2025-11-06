@@ -141,7 +141,7 @@ export default function EmployeeReport() {
     didFetchRef.current = true;
     const fetchSchedule = async () => {
       try {
-        const res = await fetch(`http://localhost:3001/api/employee/schedule/${employeeId}`);
+        const res = await fetch(`http://192.168.1.9:3001/api/employee/schedule/${employeeId}`);
         if (!res.ok) throw new Error("Failed to fetch schedule");
         const data = await res.json();
         if (data.success) {
@@ -188,7 +188,7 @@ export default function EmployeeReport() {
     if (!force && recentRequests[tab]) return;
 
     try {
-      const res = await fetch(`http://localhost:3001/api/employee/requests/${employeeId}?type=${dbType}`);
+      const res = await fetch(`http://192.168.1.9:3001/api/employee/requests/${employeeId}?type=${dbType}`);
       if (!res.ok) throw new Error("Failed to fetch requests");
       const data = await res.json();
       if (data.success) {
@@ -215,7 +215,7 @@ export default function EmployeeReport() {
     const fetchLeaveDays = async () => {
       try {
         const res = await fetch(
-          `http://localhost:3001/api/employee/leave/${employeeId}?start=${formValues.startDate}&end=${formValues.endDate}`
+          `http://192.168.1.9:3001/api/employee/leave/${employeeId}?start=${formValues.startDate}&end=${formValues.endDate}`
         );
         if (!res.ok) throw new Error("Failed to fetch leave days");
         const data = await res.json();
@@ -260,7 +260,7 @@ export default function EmployeeReport() {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch(`http://localhost:3001/api/employee/request/${employeeId}`, {
+      const res = await fetch(`http://192.168.1.9:3001/api/employee/request/${employeeId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -346,7 +346,7 @@ export default function EmployeeReport() {
       onConfirm: async () => {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
         try {
-          const res = await fetch(`http://localhost:3001/api/employee/request/${requestId}`, { method: "DELETE" });
+          const res = await fetch(`http://192.168.1.9:3001/api/employee/request/${requestId}`, { method: "DELETE" });
           const result = await res.json();
           setMessageModal({
             isOpen: true,
@@ -372,7 +372,7 @@ export default function EmployeeReport() {
       onConfirm: async () => {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
         try {
-          await fetch(`http://localhost:3001/api/employee/requests/${requestId}/action`, {
+          await fetch(`http://192.168.1.9:3001/api/employee/requests/${requestId}/action`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action }) // accept / decline

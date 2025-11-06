@@ -18,7 +18,7 @@ function Incident() {
     const [selectedIncident, setSelectedIncident] = useState();
 
     const { data, loading } = useFetchData(
-        `http://localhost:3001/api/incidents`,
+        `http://192.168.1.9:3001/api/incidents`,
         emp => ({
             incident_id: emp.incident_id,
             employee_id: emp.employee_id,
@@ -81,7 +81,7 @@ function Incident() {
         if (!window.confirm("Mark this incident as resolved?")) return;
 
         try {
-            const res = await fetch(`http://localhost:3001/api/incidents/${incidentId}`, {
+            const res = await fetch(`http://192.168.1.9:3001/api/incidents/${incidentId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: "Resolved" })

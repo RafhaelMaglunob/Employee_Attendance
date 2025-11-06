@@ -13,20 +13,22 @@ function Login() {
 
     const headerContent = (
         <div className="flex flex-rows justify-between w-full">
-            <h1 className="text-xl font-bold font-inter">Employee Management System</h1>
+            <h1 className="text-md sm:text-xl font-bold font-inter">Employee Management System</h1>
         </div>
     )
     
     useEffect(() => {
-        const token = Cookies.get("auth_token");
+        const token = Cookies.get("admin_token");
         if (token) {
             navigate("/dashboard", { replace: true });
         }
     }, [navigate]);
+
     const handleLogin = async () => {
-        const res = await fetch("http://localhost:3001/api/admin/login", {
+        const res = await fetch("http://192.168.1.9:3001/api/admin/login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",  // IMPORTANT
             body: JSON.stringify({ email, password }),
         });
 
@@ -35,14 +37,11 @@ function Login() {
         if (!res.ok) {
             setError(data.error || "Login failed");
         } else {
-            Cookies.set("auth_token", data.token, { expires: 1 });
             localStorage.setItem("userRole", data.data.role);
             localStorage.setItem("userEmail", data.data.email);
-            navigate("/dashboard", { replace: true }); 
+            navigate("/dashboard", { replace: true });
         }
     };
-
-
 
     return (
         <div className="w-full h-screen flex flex-col">

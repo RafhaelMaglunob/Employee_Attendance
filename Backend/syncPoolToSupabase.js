@@ -22,8 +22,6 @@ const tables = [
   'audit_logs',
   'incident_reports',
   'incident_reports_archive',
-  'employee_attendance',
-  'employee_attendance_archive',
   'employee_deletion_schedule',
 ];
 
@@ -57,9 +55,6 @@ function getKeyColumn(table) {
     case 'incident_reports':
     case 'incident_reports_archive':
       return 'incident_id';
-    case 'employee_attendance':
-    case 'employee_attendance_archive':
-      return 'attendance_id';
     case 'employee_notifications':
       return 'employee_id';
     case 'employee_deletion_schedule':

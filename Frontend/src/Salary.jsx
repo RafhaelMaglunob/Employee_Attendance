@@ -21,17 +21,17 @@
         });
 
         const { data, loading } = useFetchData(
-            `http://localhost:3001/api/total-work-logs`,
+            `http://192.168.1.9:3001/api/total-work-logs`,
             transformEmployeeWorkLogs
         );
 
         const { data: employees } = useFetchData(
-            'http://localhost:3001/api/employees',
+            'http://192.168.1.9:3001/api/employees',
             emp => ({ employee_id: emp.employee_id, name: emp.fullname })
         );
 
         const { data: payPeriods } = useFetchData(
-            'http://localhost:3001/api/employee-pay-periods',
+            'http://192.168.1.9:3001/api/employee-pay-periods',
             p => ({
                 employee_id: p.employee_id,
                 start_date: p.start_date,

@@ -40,7 +40,7 @@ function EmployeeDocuments() {
     const fetchDocuments = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`http://localhost:3001/api/employee/documents/${employeeId}`);
+            const res = await fetch(`http://192.168.1.9:3001/api/employee/documents/${employeeId}`);
             const data = await res.json();
             if (data.success) setDocuments(data.documents);
         } catch (err) {
@@ -63,7 +63,7 @@ function EmployeeDocuments() {
         setConfirmState({ isOpen: false, documentId: null });
 
         try {
-            const res = await fetch(`http://localhost:3001/api/employee/documents/${documentId}`, {
+            const res = await fetch(`http://192.168.1.9:3001/api/employee/documents/${documentId}`, {
                 method: 'PATCH',
             });
             const data = await res.json();

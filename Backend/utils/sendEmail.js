@@ -189,7 +189,7 @@ export async function sendAvailabilityReminderEmail(to, fullname) {
 				
 				<p>⚠️ Schedules will be finalized after the deadline. Any pending requests after Friday night will be automatically rejected.</p>
 				
-				<a href="${process.env.APP_URL || 'http://localhost:3000'}/employee/schedule" 
+				<a href="${process.env.APP_URL || 'http://192.168.1.9:3000'}/employee/schedule" 
 				   style="display: inline-block; background-color: #000; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin: 20px 0;">
 					Submit Availability Now
 				</a>

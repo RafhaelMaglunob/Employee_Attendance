@@ -24,7 +24,7 @@ export default function Scheduling() {
 
   const fetchEmployees = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/employees');
+      const res = await fetch('http://192.168.1.9:3001/api/employees');
       const data = await res.json();
       if (data.success) setEmployees(data.data.filter(e => e.status === 'Employed' || e.status === 'Probationary'));
     } catch (err) { console.error(err); }
@@ -35,7 +35,7 @@ export default function Scheduling() {
       setLoading(true);
       const startDate = format(days[0], 'yyyy-MM-dd');
       const endDate = format(days[6], 'yyyy-MM-dd');
-      const res = await fetch(`http://localhost:3001/api/schedule?start=${startDate}&end=${endDate}`);
+      const res = await fetch(`http://192.168.1.9:3001/api/schedule?start=${startDate}&end=${endDate}`);
       const data = await res.json();
       if (data.success) setScheduleData(data.data);
     } catch (err) { console.error(err); }
@@ -53,7 +53,7 @@ export default function Scheduling() {
   const handleAddShift = async () => {
     if (!selectedEmployee || !shiftDate || !timeIn || !timeOut) return alert('Please fill all fields');
     try {
-      const res = await fetch('http://localhost:3001/api/schedule', {
+      const res = await fetch('http://192.168.1.9:3001/api/schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -76,7 +76,7 @@ export default function Scheduling() {
   const handleDeleteShift = async (scheduleId) => {
     if (!confirm('Are you sure you want to delete this shift?')) return;
     try {
-      const res = await fetch(`http://localhost:3001/api/schedule/${scheduleId}`, { method: 'DELETE' });
+      const res = await fetch(`http://192.168.1.9:3001/api/schedule/${scheduleId}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) fetchSchedule();
     } catch (err) { console.error(err); }

@@ -33,7 +33,7 @@ function EmployeeSetting() {
 
   const fetchEmployeeDetails = async () => {
     try {
-      const res = await fetch(`http://localhost:3001/api/employee/${employeeId}`);
+      const res = await fetch(`http://192.168.1.9:3001/api/employee/${employeeId}`);
       const data = await res.json();
       
       if (data.employment_type === 'Full-Time') {
@@ -48,7 +48,7 @@ function EmployeeSetting() {
 
   const toggleAvailability = async (newValue) => {
     try {
-      const res = await fetch(`http://localhost:3001/api/employee/${employeeId}/availability`, {
+      const res = await fetch(`http://192.168.1.9:3001/api/employee/${employeeId}/availability`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -158,7 +158,7 @@ function EmployeeSetting() {
     if (!confirm) return;
 
     try {
-      const res = await fetch("http://localhost:3001/api/employee/change-password", {
+      const res = await fetch("http://192.168.1.9:3001/api/employee/change-password", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

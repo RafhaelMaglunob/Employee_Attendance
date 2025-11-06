@@ -22,11 +22,11 @@ export default function DocumentEmployeeModal({ isOpen, onClose, employeeId }) {
 	const fetchEmployeeDocuments = async () => {
 		setLoading(true);
 		try {
-			const empResponse = await fetch(`http://localhost:3001/api/employees/${employeeId}`);
+			const empResponse = await fetch(`http://192.168.1.9:3001/api/employees/${employeeId}`);
 			const empData = await empResponse.json();
 			setEmployeeName(empData.fullname || 'Employee');
 
-			const docsResponse = await fetch(`http://localhost:3001/api/employee/documents/${employeeId}`);
+			const docsResponse = await fetch(`http://192.168.1.9:3001/api/employee/documents/${employeeId}`);
 			const docsData = await docsResponse.json();
 
 			if (docsData.success) {
@@ -81,7 +81,7 @@ export default function DocumentEmployeeModal({ isOpen, onClose, employeeId }) {
 		}
 
 		try {
-			const response = await fetch(`http://localhost:3001/api/employee/documents/${employeeId}`, {
+			const response = await fetch(`http://192.168.1.9:3001/api/employee/documents/${employeeId}`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ documentType: doc.name, link: doc.link })
