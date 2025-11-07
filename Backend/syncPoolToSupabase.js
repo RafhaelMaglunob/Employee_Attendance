@@ -20,6 +20,7 @@ const tables = [
   'users',
   'users_archive',
   'audit_logs',
+  'employee_fingerprints',
   'incident_reports',
   'incident_reports_archive',
   'employee_deletion_schedule',
@@ -59,6 +60,8 @@ function getKeyColumn(table) {
       return 'employee_id';
     case 'employee_deletion_schedule':
       return 'schedule_id';
+    case 'employee_fingerprints':
+      return 'fingerprint_id';
     case 'employee_registry':
       return 'id';
     default:

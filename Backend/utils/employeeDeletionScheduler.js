@@ -12,7 +12,7 @@ const getDeletionTime = (deletionDate) => {
         : DateTime.fromISO(deletionDate, { zone: 'Asia/Manila' });
 
     if (!dt.isValid) return null;
-    return dt.set({ hour: 10, minute: 0, second: 0  , millisecond: 0 });
+    return dt.set({ hour: 10, minute: 0, second: 0, millisecond: 0 });
 };
 
 export const deleteEmployeeNow = async (pool, employee) => {
@@ -139,6 +139,31 @@ export const deleteEmployeeNow = async (pool, employee) => {
             catch (err) { console.error(`Supabase sync failed for incident_reports_archive ${ir.incident_id}:`, err); }
         }
 
+        // --- Archive fingerprints ---
+        const { rows: archivedFingerprints } = await client.query(`
+            INSERT INTO employee_fingerprints_archive
+            (fingerprint_id, employee_id, fingerprint_slot, registered_at, last_used, status)
+            SELECT fingerprint_id, employee_id, fingerprint_slot, registered_at, last_used, status
+            FROM employee_fingerprints
+            WHERE employee_id = $1
+            RETURNING *
+        `, [employee.employee_id]);
+        console.log(`✅ Archived ${archivedFingerprints.length} fingerprints for employee ${employee.employee_id}`);
+        for (const fp of archivedFingerprints) {
+            try { await syncRow('employee_fingerprints_archive', fp, 'fingerprint_id'); }
+            catch (err) { console.error(`Supabase sync failed for employee_fingerprints_archive ${fp.fingerprint_id}:`, err); }
+        }
+
+        // --- Archive fingerprint attendance logs ---
+        const { rows: archivedFpLogs } = await client.query(`
+            INSERT INTO fingerprint_attendance_log (employee_id, fingerprint_slot, clock_type, clock_time, device_id, confidence_score)
+            SELECT employee_id, fingerprint_slot, clock_type, clock_time, device_id, confidence_score
+            FROM fingerprint_attendance_log
+            WHERE employee_id = $1
+            RETURNING *
+        `, [employee.employee_id]);
+        console.log(`✅ Archived ${archivedFpLogs.length} fingerprint attendance logs for employee ${employee.employee_id}`);
+
         // --- Delete main tables locally ---
         const tablesToDelete = [
             'employee_documents',
@@ -148,12 +173,19 @@ export const deleteEmployeeNow = async (pool, employee) => {
             'users',
             'employee_attendance',
             'employee_contracts',
+            'fingerprint_attendance_log',
+            'employee_fingerprints',
             'employees'
         ];
-        for (const t of tablesToDelete) await client.query(`DELETE FROM ${t} WHERE employee_id = $1`, [employee.employee_id]);
+        for (const t of tablesToDelete) {
+            const { rowCount: delCount } = await client.query(`DELETE FROM ${t} WHERE employee_id = $1`, [employee.employee_id]);
+            if (delCount > 0) {
+                console.log(`✅ Deleted ${delCount} rows from ${t}`);
+            }
+        }
 
         await client.query('COMMIT');
-        console.log(`✅ Employee ${employee.employee_id} archived and deleted successfully.`);
+        console.log(`✅ Employee ${employee.employee_id} archived and deleted successfully (including fingerprints).`);
 
         if (employee.email) {
             try { await sendEmployeeDeactivatedEmail(employee.email, employee.fullname); }
@@ -168,7 +200,9 @@ export const deleteEmployeeNow = async (pool, employee) => {
             'employee_contracts',
             'users',
             'employee_attendance',
-            'incident_reports'
+            'incident_reports',
+            'employee_fingerprints',
+            'fingerprint_attendance_log'
         ];
         for (const t of supabaseTables) {
             try { await deleteRow(t, 'employee_id', employee.employee_id); }

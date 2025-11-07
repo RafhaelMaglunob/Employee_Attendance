@@ -2,25 +2,7 @@ import { syncRow } from '../utils/syncToSupabase.js';
 
 export function fingerprintController(pg) {
   
-  // Get occupied fingerprint slots
-  const getOccupiedSlots = async (req, reply) => {
-    try {
-      const result = await pg.query(
-        `SELECT fingerprint_slot FROM employee_fingerprints 
-         WHERE status != $1 OR status IS NULL`,
-        ['Deleted']
-      );
-      
-      const slots = result.rows.map(row => row.fingerprint_slot);
-      console.log('📍 Occupied slots:', slots);
-      return reply.send({ slots });
-    } catch (error) {
-      console.error('Error fetching slots:', error);
-      return reply.status(500).send({ error: 'Failed to fetch slots' });
-    }
-  };
-
-  // ✅ NEW: Check if employee already has a fingerprint registered
+  // Check if employee already has a fingerprint registered
   const checkEmployeeFingerprint = async (employee_id) => {
     const result = await pg.query(
       `SELECT ef.fingerprint_slot, ef.fingerprint_id 
@@ -31,7 +13,7 @@ export function fingerprintController(pg) {
     return result.rows.length > 0 ? result.rows[0] : null;
   };
 
-  // Start fingerprint enrollment
+  // Start fingerprint enrollment (hardware only)
   const startEnrollment = async (req, reply) => {
     const { employee_id, slot } = req.body;
     
@@ -43,7 +25,7 @@ export function fingerprintController(pg) {
         return reply.status(400).send({ error: 'Invalid slot number. Must be between 1-127' });
       }
 
-      // ✅ CHECK: Does employee already have a fingerprint?
+      // CHECK: Does employee already have a fingerprint?
       const existingFingerprint = await checkEmployeeFingerprint(employee_id);
       if (existingFingerprint) {
         console.log('❌ Employee already has fingerprint:', existingFingerprint);
@@ -58,8 +40,8 @@ export function fingerprintController(pg) {
         `SELECT ef.*, e.fullname 
          FROM employee_fingerprints ef
          LEFT JOIN employees e ON ef.employee_id = e.employee_id
-         WHERE ef.fingerprint_slot = $1 AND (ef.status != $2 OR ef.status IS NULL)`,
-        [slot, 'Deleted']
+         WHERE ef.fingerprint_slot = $1 AND ef.status = $2`,
+        [slot, 'Active']
       );
       
       if (existing.rows.length > 0) {
@@ -67,15 +49,13 @@ export function fingerprintController(pg) {
         console.log('❌ Slot already occupied:', {
           slot,
           by: occupied.employee_id,
-          name: occupied.fullname,
-          status: occupied.status
+          name: occupied.fullname
         });
         return reply.status(400).send({ 
           error: `Slot ${slot} is already occupied by ${occupied.fullname || occupied.employee_id}`,
           occupied_by: {
             employee_id: occupied.employee_id,
-            fullname: occupied.fullname,
-            status: occupied.status
+            fullname: occupied.fullname
           }
         });
       }
@@ -104,7 +84,7 @@ export function fingerprintController(pg) {
       
       console.log('📝 Enrollment status initialized:', enrollmentStatus);
       
-      // Send command to Arduino
+      // Send command to Arduino (hardware only)
       const command = `ENROLL:${employee_id}:${slot}\n`;
       
       port.write(command, (err) => {
@@ -112,7 +92,6 @@ export function fingerprintController(pg) {
           console.error('❌ Error writing to Arduino:', err);
           return reply.status(500).send({ error: 'Failed to communicate with device' });
         }
-        
         console.log('✅ Enrollment command sent to Arduino:', command);
       });
       
@@ -128,7 +107,7 @@ export function fingerprintController(pg) {
     }
   };
 
-  // Get enrollment status
+  // Get enrollment status - KEPT YOUR WORKING VERSION
   const getEnrollmentStatus = async (req, reply) => {
     const { slot } = req.query;
     const { enrollmentStatus, pg } = req.server;
@@ -189,6 +168,7 @@ export function fingerprintController(pg) {
     }
   };
 
+  // Handle attendance clock from Arduino
   const handleAttendanceClock = async (req, reply) => {
     const { fingerprint_id, timestamp } = req.body;
     
@@ -293,6 +273,7 @@ export function fingerprintController(pg) {
       );
       const updatedFingerprint = updateRes.rows[0];
 
+      // Sync all updates to Supabase
       setImmediate(async () => {
         try {
           await syncRow('fingerprint_attendance_log', logRecord, 'log_id');
@@ -309,94 +290,388 @@ export function fingerprintController(pg) {
     }
   };
 
+  // Delete fingerprint registration - FIXED FOR RE-ENROLLMENT
   const deleteFingerprint = async (req, reply) => {
-    const { slot } = req.params;
+    let { slot } = req.params;
+    const { port } = req.server;
     
     try {
-      const updateRes = await pg.query(
-        'UPDATE employee_fingerprints SET status = $1 WHERE fingerprint_slot = $2 RETURNING *',
-        ['Deleted', slot]
-      );
-
-      if (updateRes.rows.length === 0) {
-        return reply.status(404).send({ error: 'Fingerprint not found' });
-      }
-
-      const deletedFingerprint = updateRes.rows[0];
+      // Clean slot - remove any extra characters and convert to integer
+      slot = parseInt(slot, 10);
       
-      reply.send({ success: true, message: 'Fingerprint deleted' });
-
-      setImmediate(async () => {
-        try {
-          await syncRow('employee_fingerprints', deletedFingerprint, 'fingerprint_id');
-        } catch (err) {
-          console.error("❌ Supabase sync error:", err.message);
-        }
+      if (isNaN(slot) || slot < 1 || slot > 127) {
+        return reply.status(400).send({ success: false, error: 'Invalid slot number. Must be 1-127' });
+      }
+      
+      console.log(`🗑️ Deleting fingerprint from slot ${slot}`);
+      
+      // Get the fingerprint record first
+      const getRes = await pg.query(
+        'SELECT * FROM employee_fingerprints WHERE fingerprint_slot = $1 AND status = $2 LIMIT 1',
+        [slot, 'Active']
+      );
+      
+      if (getRes.rows.length === 0) {
+        return reply.status(404).send({ success: false, error: 'Fingerprint not found in database' });
+      }
+      
+      const fingerprintRecord = getRes.rows[0];
+      let hardwareDeleted = false;
+      
+      // Send delete command to Arduino first
+      return new Promise((resolve) => {
+        const command = `DELETE_SLOT:${slot}\n`;
+        let responseReceived = false;
+        
+        const timeout = setTimeout(() => {
+          if (!responseReceived) {
+            responseReceived = true;
+            console.log('⏱️ Arduino response timeout - deleting from database anyway');
+            
+            // Delete from database
+            pg.query(
+              'DELETE FROM employee_fingerprints WHERE fingerprint_slot = $1 RETURNING *',
+              [slot]
+            ).then((result) => {
+              console.log(`✅ Database record deleted for slot ${slot}`);
+              
+              // Sync deletion to Supabase
+              setImmediate(async () => {
+                try {
+                  await syncRow('employee_fingerprints', { ...fingerprintRecord, status: 'Deleted' }, 'fingerprint_id');
+                  console.log('✅ Synced to Supabase');
+                } catch (err) {
+                  console.error("❌ Supabase sync error:", err.message);
+                }
+              });
+              
+              resolve(reply.send({ success: true, message: 'Fingerprint deleted successfully' }));
+            }).catch((err) => {
+              console.error('❌ Database deletion error:', err);
+              resolve(reply.send({ success: true, message: 'Fingerprint deleted from hardware' }));
+            });
+          }
+        }, 3000);
+        
+        const { enrollmentStatus } = req.server;
+        enrollmentStatus.deleteSlotCallback = (success, message) => {
+          if (!responseReceived) {
+            responseReceived = true;
+            clearTimeout(timeout);
+            hardwareDeleted = true;
+            
+            console.log(`✅ Arduino confirmed deletion: ${message}`);
+            
+            // Now delete from database
+            pg.query(
+              'DELETE FROM employee_fingerprints WHERE fingerprint_slot = $1 RETURNING *',
+              [slot]
+            ).then((result) => {
+              console.log(`✅ Database record deleted for slot ${slot}`);
+              
+              // Sync deletion to Supabase
+              setImmediate(async () => {
+                try {
+                  await syncRow('employee_fingerprints', { ...fingerprintRecord, status: 'Deleted' }, 'fingerprint_id');
+                  console.log('✅ Synced to Supabase');
+                } catch (err) {
+                  console.error("❌ Supabase sync error:", err.message);
+                }
+              });
+              
+              resolve(reply.send({ success: true, message: 'Fingerprint deleted successfully' }));
+            }).catch((err) => {
+              console.error('❌ Database deletion error:', err);
+              resolve(reply.send({ success: true, message: 'Fingerprint deleted from hardware' }));
+            });
+          }
+        };
+        
+        port.write(command, (err) => {
+          if (err) {
+            if (!responseReceived) {
+              responseReceived = true;
+              clearTimeout(timeout);
+              console.error('❌ Error writing to Arduino:', err);
+              
+              // Still delete from database
+              pg.query(
+                'DELETE FROM employee_fingerprints WHERE fingerprint_slot = $1 RETURNING *',
+                [slot]
+              ).then((result) => {
+                console.log(`✅ Database record deleted for slot ${slot}`);
+                resolve(reply.send({ success: true, message: 'Fingerprint deleted from database' }));
+              }).catch((dbErr) => {
+                console.error('❌ Database deletion error:', dbErr);
+                resolve(reply.status(500).send({ success: false, error: 'Failed to delete fingerprint' }));
+              });
+            }
+          } else {
+            console.log('✅ Delete command sent to Arduino:', command);
+          }
+        });
       });
-
+      
     } catch (error) {
       console.error('❌ Error deleting fingerprint:', error);
-      return reply.status(500).send({ error: 'Failed to delete fingerprint' });
+      return reply.status(500).send({ success: false, error: 'Failed to delete fingerprint' });
     }
   };
 
-  const getEmployeeFingerprints = async (req, reply) => {
-    const { employee_id } = req.params;
-    
-    console.log('🔍 Fetching fingerprints for employee:', employee_id);
-    
+  // Get employees with fingerprint status (admin view)
+  const getEmployeesWithFingerprintStatus = async (req, reply) => {
     try {
+      console.log('🔍 Fetching employees with fingerprint status...');
+      
       const result = await pg.query(
         `SELECT 
-          fingerprint_id,
-          employee_id,
-          fingerprint_slot,
-          enrollment_type,
-          TO_CHAR(registered_at, 'MM/DD/YYYY HH24:MI:SS') as registered_at,
-          TO_CHAR(last_used, 'MM/DD/YYYY HH24:MI:SS') as last_used,
-          status
-         FROM employee_fingerprints 
-         WHERE employee_id = $1 AND status = $2
-         ORDER BY registered_at DESC`,
-        [employee_id, 'Active']
-      );
-      
-      console.log(`✅ Found ${result.rows.length} fingerprints for employee ${employee_id}`);
-      
-      return reply.send({ success: true, fingerprints: result.rows });
-    } catch (error) {
-      console.error('❌ Error fetching fingerprints:', error);
-      return reply.status(500).send({ error: 'Failed to fetch fingerprints' });
-    }
-  };
-
-  const getAllFingerprints = async (req, reply) => {
-    try {
-      const result = await pg.query(
-        `SELECT 
-          ef.fingerprint_id,
-          ef.employee_id,
-          e.fullname as employee_name,
+          e.employee_id,
+          e.fullname,
           e.position,
+          e.employment_type,
+          e.status as employee_status,
           ef.fingerprint_slot,
           ef.enrollment_type,
           TO_CHAR(ef.registered_at, 'MM/DD/YYYY HH24:MI:SS') as registered_at,
           TO_CHAR(ef.last_used, 'MM/DD/YYYY HH24:MI:SS') as last_used,
-          ef.status
-         FROM employee_fingerprints ef
-         JOIN employees e ON ef.employee_id = e.employee_id
-         WHERE ef.status = $1
-         ORDER BY ef.registered_at DESC`,
-        ['Active']
+          CASE 
+            WHEN ef.fingerprint_id IS NOT NULL AND ef.status = 'Active' THEN true 
+            ELSE false 
+          END as fingerprint_registered
+        FROM employees e
+        LEFT JOIN employee_fingerprints ef 
+          ON e.employee_id = ef.employee_id 
+          AND ef.status = 'Active'
+        WHERE e.status = 'Employed'
+        ORDER BY e.fullname ASC`
       );
       
-      return reply.send({ success: true, data: result.rows });
+      console.log(`✅ Found ${result.rows.length} employees`);
+      
+      return reply.send({ 
+        success: true, 
+        employees: result.rows
+      });
     } catch (error) {
-      console.error('❌ Error fetching all fingerprints:', error);
-      return reply.status(500).send({ error: 'Failed to fetch fingerprints' });
+      console.error('❌ Error fetching employees:', error);
+      return reply.status(500).send({ 
+        success: false,
+        error: 'Failed to fetch employees'
+      });
     }
   };
 
+  const startReenroll = async (req, reply) => {
+    let { slot, employee_id } = req.body;
+
+    try {
+      slot = parseInt(slot, 10);
+      if (isNaN(slot) || slot < 1 || slot > 127) {
+        return reply.status(400).send({ success: false, error: 'Invalid slot number' });
+      }
+
+      console.log(`🔄 Starting re-enrollment for slot ${slot}, employee ${employee_id}`);
+
+      // 1️⃣ Begin transaction
+      await pg.query('BEGIN');
+
+      // 2️⃣ Delete old fingerprint from main table (Active)
+      const oldFpRes = await pg.query(
+        'DELETE FROM employee_fingerprints WHERE fingerprint_slot = $1 AND status = $2 RETURNING *',
+        [slot, 'Active']
+      );
+
+      // 3️⃣ Delete old fingerprint from archive
+      await pg.query(
+        'DELETE FROM employee_fingerprints_archive WHERE fingerprint_slot = $1',
+        [slot]
+      );
+
+      // 4️⃣ Insert new fingerprint
+      const newFp = await pg.query(
+        `INSERT INTO employee_fingerprints (employee_id, fingerprint_slot, status, enrollment_type)
+        VALUES ($1, $2, 'Active', 'hardware') RETURNING *`,
+        [employee_id, slot]
+      );
+
+      // 5️⃣ Commit transaction
+      await pg.query('COMMIT');
+
+      setImmediate(async () => {
+        try {
+          // Delete old row first in Supabase
+          await deleteRow('employee_fingerprints', 'fingerprint_slot', slot);
+          await deleteRow('employee_fingerprints_archive', 'fingerprint_slot', slot);
+
+          // Insert new fingerprint into Supabase
+          await syncRow('employee_fingerprints', newFp.rows[0], 'fingerprint_id');
+
+          console.log('✅ Supabase sync completed for re-enroll');
+        } catch (err) {
+          console.error('❌ Supabase sync error:', err.message);
+        }
+      });
+
+
+
+      // 7️⃣ Hardware delete (Arduino)
+      const { enrollmentStatus, port } = req.server;
+      return new Promise((resolve) => {
+        const command = `DELETE_SLOT:${slot}\n`;
+        let responseReceived = false;
+
+        const timeout = setTimeout(() => {
+          if (!responseReceived) {
+            responseReceived = true;
+            console.log('⏱️ Arduino timeout - ready for new enrollment');
+            resolve(reply.send({ 
+              success: true, 
+              message: 'Ready for re-enrollment. Backup deleted and new fingerprint inserted.',
+              slot
+            }));
+          }
+        }, 3000);
+
+        enrollmentStatus.deleteSlotCallback = (success, message) => {
+          if (!responseReceived) {
+            responseReceived = true;
+            clearTimeout(timeout);
+            console.log(`✅ Hardware deleted: ${message}`);
+            resolve(reply.send({ 
+              success: true, 
+              message: 'Ready for re-enrollment. Please enroll new fingerprint.',
+              slot
+            }));
+          }
+        };
+
+        port.write(command, (err) => {
+          if (err && !responseReceived) {
+            responseReceived = true;
+            clearTimeout(timeout);
+            console.error('❌ Arduino error:', err);
+            resolve(reply.send({ 
+              success: true, 
+              message: 'Backup deleted. Ready for re-enrollment.',
+              slot
+            }));
+          } else {
+            console.log('✅ Delete command sent to Arduino:', command);
+          }
+        });
+      });
+
+    } catch (error) {
+      await pg.query('ROLLBACK'); // Undo partial changes
+      console.error('❌ Re-enrollment error:', error);
+      return reply.status(500).send({ success: false, error: 'Failed to start re-enrollment' });
+    }
+  };
+
+
+
+
+  const cancelReenroll = async (req, reply) => {
+    let { slot } = req.body;
+    try {
+      slot = parseInt(slot, 10);
+      console.log(`↩️ Cancelling re-enrollment for slot ${slot}`);
+      
+      // Check backup
+      const checkRes = await pg.query(
+        'SELECT * FROM employee_fingerprints WHERE fingerprint_slot = $1 AND status = $2',
+        [slot, 'PendingReenroll']
+      );
+      if (checkRes.rows.length === 0) {
+        return reply.status(404).send({ success: false, error: 'No backup found' });
+      }
+      
+      const backup = checkRes.rows[0];
+      
+      // Restore to Active
+      const updateRes = await pg.query(
+        `UPDATE employee_fingerprints 
+        SET status = $1, updated_at = CURRENT_TIMESTAMP 
+        WHERE fingerprint_slot = $2 
+        RETURNING *`,
+        ['Active', slot]
+      );
+      const restored = updateRes.rows[0];
+
+      // Sync restored fingerprint to Supabase
+      setImmediate(async () => {
+        try {
+          await syncRow('employee_fingerprints', restored, 'fingerprint_id');
+          console.log('✅ Restored fingerprint synced to Supabase');
+        } catch (err) {
+          console.error('❌ Supabase sync error (restore):', err.message);
+        }
+      });
+
+      console.log(`✅ Restored old fingerprint for slot ${slot}`);
+      return reply.send({ success: true, message: 'Old fingerprint restored', slot });
+
+    } catch (error) {
+      console.error('❌ Cancel re-enrollment error:', error);
+      return reply.status(500).send({ success: false, error: 'Failed to cancel re-enrollment' });
+    }
+  };
+
+  const confirmReenroll = async (req, reply) => {
+    let { slot } = req.body;
+    try {
+      slot = parseInt(slot, 10);
+      console.log(`✅ Confirming re-enrollment for slot ${slot}`);
+      
+      // Delete old backup
+      const deleteRes = await pg.query(
+        'DELETE FROM employee_fingerprints WHERE fingerprint_slot = $1 AND status = $2 RETURNING *',
+        [slot, 'PendingReenroll']
+      );
+      const deletedBackup = deleteRes.rows[0];
+      
+      // Sync deletion to Supabase
+      if (deletedBackup) {
+        setImmediate(async () => {
+          try {
+            await syncRow('employee_fingerprints', { ...deletedBackup, status: 'Deleted' }, 'fingerprint_id');
+            console.log('✅ Old backup deletion synced to Supabase');
+          } catch (err) {
+            console.error('❌ Supabase sync error (delete backup):', err.message);
+          }
+        });
+      }
+
+      // Ensure new fingerprint is Active
+      const updateRes = await pg.query(
+        `UPDATE employee_fingerprints 
+        SET status = $1 
+        WHERE fingerprint_slot = $2 AND status != $3
+        RETURNING *`,
+        ['Active', slot, 'Active']
+      );
+      const newActive = updateRes.rows[0];
+
+      // Sync new Active fingerprint
+      if (newActive) {
+        setImmediate(async () => {
+          try {
+            await syncRow('employee_fingerprints', newActive, 'fingerprint_id');
+            console.log('✅ New Active fingerprint synced to Supabase');
+          } catch (err) {
+            console.error('❌ Supabase sync error (new active):', err.message);
+          }
+        });
+      }
+
+      return reply.send({ success: true, message: 'Re-enrollment confirmed. New fingerprint is active.', slot });
+
+    } catch (error) {
+      console.error('❌ Confirm re-enrollment error:', error);
+      return reply.status(500).send({ success: false, error: 'Failed to confirm re-enrollment' });
+    }
+  };
+  // Get fingerprint logs
   const getFingerprintLogs = async (req, reply) => {
     const { employee_id, date } = req.query;
     
@@ -433,474 +708,20 @@ export function fingerprintController(pg) {
       
       return reply.send({ success: true, logs: result.rows });
     } catch (error) {
-      console.error('❌ Error fetching fingerprint logs:', error);
+      console.error('❌ Error fetching logs:', error);
       return reply.status(500).send({ error: 'Failed to fetch logs' });
     }
   };
 
-  const getEmployeesWithFingerprintStatus = async (req, reply) => {
-    try {
-      console.log('🔍 Fetching employees with fingerprint status...');
-      
-      const result = await pg.query(
-        `SELECT 
-          e.employee_id,
-          e.fullname,
-          e.position,
-          e.employment_type,
-          e.status as employee_status,
-          ef.fingerprint_slot,
-          ef.enrollment_type,
-          TO_CHAR(ef.registered_at, 'MM/DD/YYYY HH24:MI:SS') as registered_at,
-          TO_CHAR(ef.last_used, 'MM/DD/YYYY HH24:MI:SS') as last_used,
-          CASE 
-            WHEN ef.fingerprint_id IS NOT NULL AND ef.status = 'Active' THEN true 
-            ELSE false 
-          END as fingerprint_registered
-        FROM employees e
-        LEFT JOIN employee_fingerprints ef 
-          ON e.employee_id = ef.employee_id 
-          AND ef.status = 'Active'
-        WHERE e.status = 'Employed'
-        ORDER BY e.fullname ASC`
-      );
-      
-      console.log(`✅ Found ${result.rows.length} employees`);
-      console.log(`📊 With fingerprints: ${result.rows.filter(r => r.fingerprint_registered).length}`);
-      
-      return reply.send({ 
-        success: true, 
-        employees: result.rows,
-        total: result.rows.length,
-        registered: result.rows.filter(r => r.fingerprint_registered).length
-      });
-    } catch (error) {
-      console.error('❌ Error fetching employees with fingerprint status:', error);
-      return reply.status(500).send({ 
-        success: false,
-        error: 'Failed to fetch employees',
-        details: error.message 
-      });
-    }
-  };
-
-  const validateHardwareFingerprint = async (req, reply) => {
-    const { slot } = req.params;
-    const { port } = req.server;
-    
-    console.log('🔍 Validating hardware fingerprint for slot:', slot);
-    
-    try {
-      const dbCheck = await pg.query(
-        `SELECT ef.*, e.fullname 
-         FROM employee_fingerprints ef
-         JOIN employees e ON ef.employee_id = e.employee_id
-         WHERE ef.fingerprint_slot = $1 AND ef.status = $2`,
-        [slot, 'Active']
-      );
-      
-      const existsInDB = dbCheck.rows.length > 0;
-      const dbData = existsInDB ? dbCheck.rows[0] : null;
-      
-      return new Promise((resolve) => {
-        const command = `VALIDATE:${slot}\n`;
-        let responseReceived = false;
-        
-        const timeout = setTimeout(() => {
-          if (!responseReceived) {
-            resolve(reply.send({
-              success: false,
-              slot: parseInt(slot),
-              existsInDB,
-              existsInHardware: false,
-              status: 'timeout',
-              message: 'Arduino did not respond',
-              employee: dbData ? dbData.fullname : null
-            }));
-          }
-        }, 5000);
-        
-        const { enrollmentStatus } = req.server;
-        enrollmentStatus.validationSlot = parseInt(slot);
-        enrollmentStatus.validationCallback = (exists) => {
-          responseReceived = true;
-          clearTimeout(timeout);
-          
-          const synced = existsInDB === exists;
-          
-          resolve(reply.send({
-            success: true,
-            slot: parseInt(slot),
-            existsInDB,
-            existsInHardware: exists,
-            synced,
-            status: synced ? 'synced' : 'out_of_sync',
-            message: synced 
-              ? 'Fingerprint is synchronized' 
-              : existsInDB && !exists
-                ? 'Fingerprint exists in database but not in hardware'
-                : !existsInDB && exists
-                  ? 'Fingerprint exists in hardware but not in database'
-                  : 'Unknown sync error',
-            employee: dbData ? dbData.fullname : null,
-            recommendation: !synced && existsInDB && !exists
-              ? 'Re-enroll this fingerprint'
-              : !synced && !existsInDB && exists
-                ? 'Delete from hardware or register in database'
-                : null
-          }));
-        };
-        
-        port.write(command, (err) => {
-          if (err) {
-            responseReceived = true;
-            clearTimeout(timeout);
-            console.error('❌ Error writing to Arduino:', err);
-            resolve(reply.status(500).send({ 
-              error: 'Failed to communicate with device',
-              existsInDB 
-            }));
-          } else {
-            console.log('✅ Validation command sent to Arduino:', command);
-          }
-        });
-      });
-      
-    } catch (error) {
-      console.error('❌ Error validating fingerprint:', error);
-      return reply.status(500).send({ error: 'Validation failed' });
-    }
-  };
-
-  const syncCheck = async (req, reply) => {
-    const { port } = req.server;
-    
-    console.log('🔄 Starting full sync check...');
-    
-    try {
-      const dbFingerprints = await pg.query(
-        `SELECT ef.fingerprint_slot, ef.employee_id, e.fullname
-         FROM employee_fingerprints ef
-         JOIN employees e ON ef.employee_id = e.employee_id
-         WHERE ef.status = $1
-         ORDER BY ef.fingerprint_slot`,
-        ['Active']
-      );
-      
-      const dbSlots = new Set(dbFingerprints.rows.map(r => r.fingerprint_slot));
-      
-      return new Promise((resolve) => {
-        const command = 'SCAN_ALL\n';
-        let responseReceived = false;
-        
-        const timeout = setTimeout(() => {
-          if (!responseReceived) {
-            resolve(reply.status(504).send({
-              error: 'Arduino did not respond to sync check'
-            }));
-          }
-        }, 30000);
-        
-        const { enrollmentStatus } = req.server;
-        enrollmentStatus.syncCheckCallback = (hardwareSlots) => {
-          responseReceived = true;
-          clearTimeout(timeout);
-          
-          const hwSet = new Set(hardwareSlots);
-          
-          const inDBNotInHW = [...dbSlots].filter(slot => !hwSet.has(slot));
-          const inHWNotInDB = [...hwSet].filter(slot => !dbSlots.has(slot));
-          const synced = [...dbSlots].filter(slot => hwSet.has(slot));
-          
-          const issues = [];
-          
-          inDBNotInHW.forEach(slot => {
-            const emp = dbFingerprints.rows.find(r => r.fingerprint_slot === slot);
-            issues.push({
-              slot,
-              issue: 'db_only',
-              employee_id: emp?.employee_id,
-              employee_name: emp?.fullname,
-              message: `Slot ${slot} (${emp?.fullname}) exists in database but not in hardware`,
-              recommendation: 'Re-enroll this fingerprint'
-            });
-          });
-          
-          inHWNotInDB.forEach(slot => {
-            issues.push({
-              slot,
-              issue: 'hardware_only',
-              message: `Slot ${slot} exists in hardware but not in database`,
-              recommendation: 'Delete from hardware or register in database'
-            });
-          });
-          
-          resolve(reply.send({
-            success: true,
-            summary: {
-              total_in_db: dbSlots.size,
-              total_in_hardware: hwSet.size,
-              synced: synced.length,
-              issues: issues.length
-            },
-            synced_slots: synced,
-            issues,
-            database_fingerprints: dbFingerprints.rows.map(r => ({
-              slot: r.fingerprint_slot,
-              employee_id: r.employee_id,
-              employee_name: r.fullname,
-              in_hardware: hwSet.has(r.fingerprint_slot)
-            })),
-            hardware_slots: [...hwSet]
-          }));
-        };
-        
-        port.write(command, (err) => {
-          if (err) {
-            responseReceived = true;
-            clearTimeout(timeout);
-            console.error('❌ Error writing to Arduino:', err);
-            resolve(reply.status(500).send({ error: 'Failed to communicate with device' }));
-          } else {
-            console.log('✅ Sync check command sent to Arduino');
-          }
-        });
-      });
-      
-    } catch (error) {
-      console.error('❌ Error during sync check:', error);
-      return reply.status(500).send({ error: 'Sync check failed' });
-    }
-  };
-
-  const clearHardwareSlot = async (req, reply) => {
-    const { slot } = req.params;
-    const { port } = req.server;
-    
-    console.log('🗑️ Clearing hardware slot:', slot);
-    
-    try {
-      return new Promise((resolve) => {
-        const command = `DELETE_SLOT:${slot}\n`;
-        let responseReceived = false;
-        
-        const timeout = setTimeout(() => {
-          if (!responseReceived) {
-            resolve(reply.status(504).send({
-              error: 'Arduino did not respond'
-            }));
-          }
-        }, 5000);
-        
-        const { enrollmentStatus } = req.server;
-        enrollmentStatus.deleteSlotCallback = (success, message) => {
-          responseReceived = true;
-          clearTimeout(timeout);
-          
-          if (success) {
-            resolve(reply.send({
-              success: true,
-              message: `Slot ${slot} cleared from hardware`,
-              slot: parseInt(slot)
-            }));
-          } else {
-            resolve(reply.status(400).send({
-              success: false,
-              error: message || 'Failed to clear slot'
-            }));
-          }
-        };
-        
-        port.write(command, (err) => {
-          if (err) {
-            responseReceived = true;
-            clearTimeout(timeout);
-            console.error('❌ Error writing to Arduino:', err);
-            resolve(reply.status(500).send({ error: 'Failed to communicate with device' }));
-          } else {
-            console.log('✅ Delete slot command sent to Arduino');
-          }
-        });
-      });
-      
-    } catch (error) {
-      console.error('❌ Error clearing hardware slot:', error);
-      return reply.status(500).send({ error: 'Failed to clear slot' });
-    }
-  };
-
-  const enrollDigitalFingerprint = async (req, reply) => {
-    const { employee_id, slot, fingerprint_data, enrollment_type } = req.body;
-    
-    console.log('🖐️ Starting digital enrollment:', { 
-      employee_id, 
-      slot, 
-      enrollment_type,
-      has_fingerprint_data: !!fingerprint_data 
-    });
-    
-    try {
-      if (!slot || slot < 1 || slot > 127) {
-        return reply.status(400).send({ error: 'Invalid slot number. Must be between 1-127' });
-      }
-
-      if (!fingerprint_data || !fingerprint_data.template_id) {
-        console.log('❌ Invalid fingerprint data:', fingerprint_data);
-        return reply.status(400).send({ error: 'Invalid fingerprint data' });
-      }
-
-      // ✅ CHECK: Does employee already have a fingerprint?
-      const existingFingerprint = await checkEmployeeFingerprint(employee_id);
-      if (existingFingerprint) {
-        console.log('❌ Employee already has fingerprint:', existingFingerprint);
-        return reply.status(400).send({ 
-          error: `This employee already has a fingerprint registered in slot ${existingFingerprint.fingerprint_slot}`,
-          existing: existingFingerprint
-        });
-      }
-
-      const existing = await pg.query(
-        `SELECT ef.*, e.fullname 
-        FROM employee_fingerprints ef
-        LEFT JOIN employees e ON ef.employee_id = e.employee_id
-        WHERE ef.fingerprint_slot = $1 AND (ef.status != $2 OR ef.status IS NULL)`,
-        [slot, 'Deleted']
-      );
-      
-      if (existing.rows.length > 0) {
-        const occupied = existing.rows[0];
-        return reply.status(400).send({ 
-          error: `Slot ${slot} is already occupied by ${occupied.fullname || occupied.employee_id}`,
-          occupied_by: {
-            employee_id: occupied.employee_id,
-            fullname: occupied.fullname,
-            status: occupied.status
-          }
-        });
-      }
-      
-      const employee = await pg.query(
-        'SELECT employee_id, fullname FROM employees WHERE employee_id = $1',
-        [employee_id]
-      );
-      
-      if (employee.rows.length === 0) {
-        return reply.status(404).send({ error: 'Employee not found' });
-      }
-
-      // ✅ IMPORTANT: For digital-only fingerprints, store in database WITHOUT Arduino
-      // Arduino sensors typically don't support uploading arbitrary templates
-      try {
-        const insertRes = await pg.query(
-          `INSERT INTO employee_fingerprints 
-          (employee_id, fingerprint_slot, status, fingerprint_data, enrollment_type)
-          VALUES ($1, $2, $3, $4::jsonb, $5)
-          RETURNING *`,
-          [employee_id, slot, 'Active', JSON.stringify(fingerprint_data), 'digital']
-        );
-
-        const fingerprintRecord = insertRes.rows[0];
-        
-        console.log(`✅ Digital fingerprint registered: Employee ${employee_id} -> Slot ${slot}`);
-        
-        setImmediate(async () => {
-          try {
-            await syncRow('employee_fingerprints', fingerprintRecord, 'fingerprint_id');
-            console.log('✅ Synced to Supabase');
-          } catch (err) {
-            console.error("❌ Supabase sync error:", err.message);
-          }
-        });
-        
-        return reply.send({
-          success: true,
-          message: 'Digital fingerprint enrolled successfully (database only)',
-          data: {
-            fingerprint_id: fingerprintRecord.fingerprint_id,
-            employee_id: fingerprintRecord.employee_id,
-            slot: fingerprintRecord.fingerprint_slot,
-            enrollment_type: fingerprintRecord.enrollment_type,
-            registered_at: fingerprintRecord.registered_at,
-            stored_in_hardware: false
-          }
-        });
-        
-      } catch (dbError) {
-        console.error('❌ Database error:', dbError);
-        
-        if (dbError.code === '23505') {
-          return reply.status(409).send({ 
-            error: `Slot ${slot} was occupied during enrollment`,
-            details: 'Please refresh and select a different slot.'
-          });
-        }
-        
-        return reply.status(500).send({ 
-          error: 'Failed to save to database',
-          details: dbError.message 
-        });
-      }
-        
-    } catch (error) {
-      console.error('❌ Error enrolling digital fingerprint:', error);
-      return reply.status(500).send({ 
-        error: 'Failed to enroll digital fingerprint',
-        details: error.message 
-      });
-    }
-  };
-
-  const validateFingerprint = async (req, reply) => {
-    const { employee_id, slot } = req.query;
-    
-    try {
-      let query = 'SELECT * FROM employee_fingerprints WHERE status = $1';
-      const params = ['Active'];
-      
-      if (employee_id) {
-        params.push(employee_id);
-        query += ` AND employee_id = ${params.length}`;
-      }
-      
-      if (slot) {
-        params.push(slot);
-        query += ` AND fingerprint_slot = ${params.length}`;
-      }
-      
-      const result = await pg.query(query, params);
-      
-      if (result.rows.length === 0) {
-        return reply.status(404).send({ 
-          error: 'Fingerprint not found',
-          exists: false 
-        });
-      }
-      
-      return reply.send({ 
-        exists: true,
-        data: result.rows[0]
-      });
-      
-    } catch (error) {
-      console.error('❌ Error validating fingerprint:', error);
-      return reply.status(500).send({ error: 'Validation failed' });
-    }
-  };
-
   return {
-    getOccupiedSlots,
     startEnrollment,
     getEnrollmentStatus,
     handleAttendanceClock,
     deleteFingerprint,
-    getEmployeeFingerprints,
-    getAllFingerprints,
-    getFingerprintLogs,
     getEmployeesWithFingerprintStatus,
-    validateHardwareFingerprint,
-    syncCheck,
-    clearHardwareSlot,
-    enrollDigitalFingerprint,
-    validateFingerprint
+    getFingerprintLogs,
+    startReenroll,     
+    cancelReenroll,      
+    confirmReenroll
   };
 }

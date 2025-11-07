@@ -1,6 +1,7 @@
-import {useState} from 'react'
+import { useState } from 'react';
+import { startOfWeek } from 'date-fns';
 
-export default function CalendarModal({ onClose }) {
+export default function CalendarModal({ onClose, onSelectDate }) {
   const today = new Date();
   const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -13,10 +14,17 @@ export default function CalendarModal({ onClose }) {
   const prevMonth = () => setCurrentDate(new Date(year, currentDate.getMonth() - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(year, currentDate.getMonth() + 1, 1));
 
+  const handleDayClick = (day) => {
+    const selectedDate = new Date(year, currentDate.getMonth(), day);
+    if (onSelectDate) {
+      onSelectDate(startOfWeek(selectedDate, { weekStartsOn: 1 })); // weekStartsOn Monday
+    }
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex justify-center items-center z-50">
       <div className="bg-white rounded-2xl shadow-xl p-5 w-[90%] max-w-[380px] animate-fadeIn">
-        
         {/* Header */}
         <div className="flex justify-between items-center mb-3">
           <button onClick={prevMonth} className="text-gray-500 hover:text-black">←</button>
@@ -41,6 +49,7 @@ export default function CalendarModal({ onClose }) {
             return (
               <div
                 key={i}
+                onClick={() => handleDayClick(day)}
                 className={`py-2 rounded-lg hover:bg-gray-200 cursor-pointer transition ${
                   isToday ? "bg-gray-800 text-white hover:bg-gray-900" : ""
                 }`}

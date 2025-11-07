@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { useFetchData } from "./component/hooks/useFetchData";
 import { Card } from "./component/ui/card";
 import { Table } from "./component/data/table";
-import FingerprintEnrollModal from './component/modals/FingerprintEnrollModal';
 import {
   format,
   addWeeks,
@@ -20,28 +19,12 @@ function EmployeeDashboard() {
   const employeeName = localStorage.getItem("fullname");
   const [currentWeek, setCurrentWeek] = useState(new Date());
 
-  // Fingerprint modal state
-  const [showFingerprintModal, setShowFingerprintModal] = useState(false);
-
   // Fetch fingerprint data
   const { data: fingerprintData = [], loading: fingerprintLoading } = useFetchData(
     employeeId 
       ? `http://192.168.1.9:3001/api/fingerprint/employee/${employeeId}` 
       : null
   );
-
-  useEffect(() => {
-    // Only show modal if data is loaded and no fingerprints exist
-    if (!fingerprintLoading && fingerprintData && fingerprintData.length === 0) {
-      setShowFingerprintModal(true);
-    }
-  }, [fingerprintData, fingerprintLoading]);
-
-  const handleFingerprintSuccess = () => {
-    setShowFingerprintModal(false);
-    // Reload the page to refresh fingerprint data
-    window.location.reload();
-  };
 
   // Weekly Summary data
   const [hoursWorked, setHoursWorked] = useState(32);
@@ -121,14 +104,6 @@ function EmployeeDashboard() {
 
   return (
     <div className="space-y-6">
-      {showFingerprintModal && (
-        <FingerprintEnrollModal
-          isOpen={showFingerprintModal}
-          onSuccess={handleFingerprintSuccess}
-          employeeId={employeeId}
-          employeeName={employeeName}
-        />
-      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Weekly Schedule Card */}

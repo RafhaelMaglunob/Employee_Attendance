@@ -306,8 +306,11 @@ fastify.register(fastifyJwt, {
 
 fastify.decorate("authenticate", async function (req, reply) {
   try {
+    console.log('🔐 Token to verify:', req.headers.authorization);
     await req.jwtVerify();
+    console.log('✅ Token verified successfully');
   } catch (err) {
+    console.log('❌ Token verification failed:', err.message);
     return reply.status(401).send({ error: "Invalid or expired token" });
   }
 });

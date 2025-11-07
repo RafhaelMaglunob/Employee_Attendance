@@ -1,10 +1,9 @@
+// scheduleRoutes.js
 import { scheduleController } from '../controllers/scheduleController.js';
 
-export function scheduleRoutes(fastify, options ) {
+export function scheduleRoutes(fastify, options) {
     const schedule = scheduleController(fastify.pg);
+    
+    // GET - Fetch all schedules for date range
     fastify.get('/schedule', schedule.getSchedule);
-    fastify.post('/schedule', schedule.addSchedule);
-    fastify.put('/schedule/:id', schedule.updateSchedule);
-    fastify.delete('/schedule/:id', schedule.deleteSchedule);
-    fastify.post('/schedule/publish', schedule.publishSchedules);
 }

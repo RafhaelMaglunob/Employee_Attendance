@@ -14,12 +14,41 @@ export const supabase = createClient(
  */
 export async function syncRow(table, row, primaryKey = 'id') {
     try {
-        const { error } = await supabase
-            .from(table)
-            .upsert(row, { onConflict: primaryKey });
-        if (error) console.error(`Supabase sync error [${table}]:`, error.message);
+        console.log(`📤 Syncing ${table}:`, { [primaryKey]: row[primaryKey], status: row.status });
+
+        if (table === 'employee_fingerprints') {
+            // For fingerprints, use the fingerprint_id as conflict target
+            const { error } = await supabase
+                .from(table)
+                .upsert(row, { onConflict: primaryKey });
+            
+            if (error) {
+                // If it's a duplicate slot error for a deleted record, that's OK
+                if (error.code === '23505' && row.status === 'Deleted') {
+                    console.log(`✅ Fingerprint slot already handled (status: ${row.status})`);
+                    return;
+                }
+                console.error(`❌ Supabase sync error [${table}]:`, error.message);
+                console.error(`   Details:`, error.details);
+                return;
+            }
+            
+            console.log(`✅ ${table} synced successfully (${row.status})`);
+        } else {
+            // For other tables, use standard upsert
+            const { error } = await supabase
+                .from(table)
+                .upsert(row, { onConflict: primaryKey });
+            
+            if (error) {
+                console.error(`❌ Supabase sync error [${table}]:`, error.message);
+                return;
+            }
+            
+            console.log(`✅ ${table} synced successfully`);
+        }
     } catch (err) {
-        console.error(`Supabase sync failed [${table}]:`, err.message);
+        console.error(`❌ Supabase sync failed [${table}]:`, err.message);
     }
 }
 

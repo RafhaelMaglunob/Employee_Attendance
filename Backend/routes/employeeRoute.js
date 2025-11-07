@@ -15,7 +15,6 @@ export async function employeeRoutes(fastify, options) {
     fastify.put("/employee/requests/:type/:requestId", controller.updateEmployeeRequest);
     fastify.get('/fingerprint/attendance', controller.getFingerprintAttendance);
     fastify.get('/fingerprint/attendance/:date', controller.getFingerprintAttendanceByDate);
-
     fastify.get('/employee/schedule/:employeeId/dashboard', dashboardController.getEmployeeSchedule);
     fastify.get('/employee/time-logs/:employeeId/dashboard', dashboardController.getEmployeeTimeLogs);
     fastify.get('/employee/weekly-summary/:employeeId/dashboard', dashboardController.getWeeklySummary);

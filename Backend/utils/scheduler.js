@@ -68,6 +68,7 @@ cron.schedule("0 6 * * 4", async () => {
 /**
  * ✅ Auto-assign Full-Time employees (runs every Friday at 11:59 PM)
  */
+// */20 * * * * * (Test 20second)
 cron.schedule("59 23 * * 5", async () => {
 	try {
 		console.log("🗓️ Auto-assign Full-Time: Starting...");
@@ -201,6 +202,7 @@ cron.schedule("59 23 * * 5", async () => {
 		console.error("🔥 Auto-assign FT error:", err);
 	}
 });
+
 
 /**
  * ✅ Finalize Part-Time requests every Friday 11:59 PM
