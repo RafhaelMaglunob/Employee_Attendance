@@ -129,10 +129,7 @@ function EmployeeSetting() {
         </div>
       ),
     }] : []),
-    {
-      label: "Certificate of Employee",
-      action: () => navigate("/employee/certificate"),
-    },
+    
   ];
 
   const handleChangePasswordSubmit = async ({ oldPassword, newPassword }) => {

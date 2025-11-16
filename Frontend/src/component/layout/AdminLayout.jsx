@@ -30,9 +30,9 @@ export default function AdminLayout() {
   const currentPath = location.pathname.split("/")[1] || "dashboard";
   const [path, setPath] = useState(currentPath);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const Admin_buttonPath = ["Dashboard", "Employees", "Fingerprint", "Auditing", "Salary", "Incidents", "Reports", "Approvals", "Scheduling"]
-  const HR_buttonPath = ["Dashboard", "Employees", "Fingerprint", "Auditing", "Salary", "Incidents", "Reports", "Approvals"]
-  const HeadStaff_buttonPath = ["Dashboard","Scheduling", "Attendance"];
+  const Admin_buttonPath = [ "Employees", "Fingerprint", "Auditing", "Salary", "Incidents", "Reports", "Approvals", "Scheduling"]
+  const HR_buttonPath = ["Employees", "Fingerprint", "Auditing", "Salary", "Incidents", "Reports", "Approvals"]
+  const HeadStaff_buttonPath = ["Scheduling", "Attendance"];
 
   const filteredSidebar = sidebar.filter(item => {
     if (userRole === "admin") {
@@ -54,6 +54,7 @@ export default function AdminLayout() {
 
   const handleLogout = async () => {
     Cookies.remove("admin_token");
+    localStorage.removeItem("admin_token")
     localStorage.removeItem("buttonPath");
     localStorage.removeItem("userRole");
     localStorage.removeItem("userEmail");
@@ -127,7 +128,6 @@ export default function AdminLayout() {
             <div className="flex flex-row justify-between w-full mr-10 space-x-4 relative">
               <img src="../img/TheCrunchLogoMnoBG 1.png" className="w-auto object-contain" />
               <div className="flex flex-row items-center space-x-2 relative">
-                <img src="../img/Notification.png" alt="Notification Icon" className="w-5 h-5" />
                 <Headers userRole={userRole} userEmail={userEmail} onLogout={handleLogout} addSVG>
                   <div className="border-2 rounded-[50px]">
                     <img

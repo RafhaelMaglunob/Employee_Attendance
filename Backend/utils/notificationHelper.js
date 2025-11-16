@@ -59,6 +59,30 @@ export async function sendNotification(pool, employeeId, type, action, message, 
     }
 }
 
+export const clearReadNotifications = async (pool, employeeId) => {
+    const io = getIo();
+
+    try {
+        const result = await pool.query(
+            `DELETE FROM notifications 
+            WHERE employee_id = $1 AND is_read = TRUE
+            RETURNING *`,
+            [employeeId]
+        );
+
+        // Emit update to employee
+        io.to(`employee_${employeeId}`).emit('notificationsCleared', {
+            deleted: result.rowCount
+        });
+
+        return result.rowCount;
+
+    } catch (err) {
+        console.error("❌ Error clearing notifications:", err);
+        throw err;
+    }
+};
+
 /**
  * Generate notification message for request updates
  */

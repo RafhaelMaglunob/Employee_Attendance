@@ -1,7 +1,7 @@
   import React, { useMemo, useState, useEffect, useCallback } from "react";
   import { Button } from "./component/ui/button";
   import { Card } from "./component/ui/card";
-  import { PaginatedTable } from "./component/data/table";
+  import { PaginatedTable } from "./component/data/table";  
   import { exportTableToPdf } from "./component/utils/exportablePdf";
   import RequestViewModal from "./component/modals/RequestViewModal";
   import { useSocket } from "./component/utils/SocketContext";
@@ -226,15 +226,18 @@
         <div className="flex justify-between items-center mb-5 mt-3 mr-3">
           <h1 className="font-bold text-2xl">Employee Requests</h1>
           <Button
-            onClick={() => exportTableToPdf(
-              [...leaveColumns, ...overtimeColumns, ...offsetColumns], 
-              requestData, 
-              `employee_requests_${new Date().toISOString()}.docx`
-            )}
+            onClick={() => {
+              exportTableToPdf(leaveColumns, leaveData, "leave_requests.pdf");
+              exportTableToPdf(overtimeColumns, overtimeData, "overtime_requests.pdf");
+              exportTableToPdf(offsetColumns, offsetData, "offset_requests.pdf");
+            }}
             className="bg-black text-white px-3 py-2 rounded-xl flex items-center hover:bg-black/70"
           >
             Export Report
           </Button>
+
+
+
         </div>
 
         <div className="flex flex-col space-y-5">

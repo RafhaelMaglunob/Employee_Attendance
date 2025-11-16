@@ -13,7 +13,7 @@ export function fingerprintController(pg) {
     return result.rows.length > 0 ? result.rows[0] : null;
   };
 
-  // Start fingerprint enrollment (hardware only)
+  // Start fingerprint enrollment (hardware only) - NO AUTH
   const startEnrollment = async (req, reply) => {
     const { employee_id, slot } = req.body;
     
@@ -107,7 +107,7 @@ export function fingerprintController(pg) {
     }
   };
 
-  // Get enrollment status - KEPT YOUR WORKING VERSION
+  // Get enrollment status - NO AUTH
   const getEnrollmentStatus = async (req, reply) => {
     const { slot } = req.query;
     const { enrollmentStatus, pg } = req.server;
@@ -168,7 +168,7 @@ export function fingerprintController(pg) {
     }
   };
 
-  // Handle attendance clock from Arduino
+  // Handle attendance clock from Arduino - NO AUTH
   const handleAttendanceClock = async (req, reply) => {
     const { fingerprint_id, timestamp } = req.body;
     
@@ -290,7 +290,7 @@ export function fingerprintController(pg) {
     }
   };
 
-  // Delete fingerprint registration - FIXED FOR RE-ENROLLMENT
+  // Delete fingerprint registration - NO AUTH
   const deleteFingerprint = async (req, reply) => {
     let { slot } = req.params;
     const { port } = req.server;
@@ -418,7 +418,7 @@ export function fingerprintController(pg) {
     }
   };
 
-  // Get employees with fingerprint status (admin view)
+  // Get employees with fingerprint status (admin view) - NO AUTH
   const getEmployeesWithFingerprintStatus = async (req, reply) => {
     try {
       console.log('🔍 Fetching employees with fingerprint status...');
@@ -461,6 +461,7 @@ export function fingerprintController(pg) {
     }
   };
 
+  // Re-enroll fingerprint - NO AUTH
   const startReenroll = async (req, reply) => {
     let { slot, employee_id } = req.body;
 
@@ -472,49 +473,19 @@ export function fingerprintController(pg) {
 
       console.log(`🔄 Starting re-enrollment for slot ${slot}, employee ${employee_id}`);
 
-      // 1️⃣ Begin transaction
-      await pg.query('BEGIN');
-
-      // 2️⃣ Delete old fingerprint from main table (Active)
-      const oldFpRes = await pg.query(
-        'DELETE FROM employee_fingerprints WHERE fingerprint_slot = $1 AND status = $2 RETURNING *',
+      // Get the fingerprint record first
+      const getRes = await pg.query(
+        'SELECT * FROM employee_fingerprints WHERE fingerprint_slot = $1 AND status = $2 LIMIT 1',
         [slot, 'Active']
       );
+      
+      if (getRes.rows.length === 0) {
+        return reply.status(404).send({ success: false, error: 'Fingerprint not found' });
+      }
+      
+      const fingerprintRecord = getRes.rows[0];
 
-      // 3️⃣ Delete old fingerprint from archive
-      await pg.query(
-        'DELETE FROM employee_fingerprints_archive WHERE fingerprint_slot = $1',
-        [slot]
-      );
-
-      // 4️⃣ Insert new fingerprint
-      const newFp = await pg.query(
-        `INSERT INTO employee_fingerprints (employee_id, fingerprint_slot, status, enrollment_type)
-        VALUES ($1, $2, 'Active', 'hardware') RETURNING *`,
-        [employee_id, slot]
-      );
-
-      // 5️⃣ Commit transaction
-      await pg.query('COMMIT');
-
-      setImmediate(async () => {
-        try {
-          // Delete old row first in Supabase
-          await deleteRow('employee_fingerprints', 'fingerprint_slot', slot);
-          await deleteRow('employee_fingerprints_archive', 'fingerprint_slot', slot);
-
-          // Insert new fingerprint into Supabase
-          await syncRow('employee_fingerprints', newFp.rows[0], 'fingerprint_id');
-
-          console.log('✅ Supabase sync completed for re-enroll');
-        } catch (err) {
-          console.error('❌ Supabase sync error:', err.message);
-        }
-      });
-
-
-
-      // 7️⃣ Hardware delete (Arduino)
+      // Hardware delete (Arduino)
       const { enrollmentStatus, port } = req.server;
       return new Promise((resolve) => {
         const command = `DELETE_SLOT:${slot}\n`;
@@ -523,12 +494,49 @@ export function fingerprintController(pg) {
         const timeout = setTimeout(() => {
           if (!responseReceived) {
             responseReceived = true;
-            console.log('⏱️ Arduino timeout - ready for new enrollment');
-            resolve(reply.send({ 
-              success: true, 
-              message: 'Ready for re-enrollment. Backup deleted and new fingerprint inserted.',
-              slot
-            }));
+            console.log('⏱️ Arduino timeout - deleting from database anyway');
+            
+            // Delete from database
+            pg.query(
+              'DELETE FROM employee_fingerprints WHERE fingerprint_slot = $1 RETURNING *',
+              [slot]
+            ).then((result) => {
+              console.log(`✅ Old fingerprint deleted for re-enrollment`);
+              
+              // Sync deletion to Supabase
+              setImmediate(async () => {
+                try {
+                  await syncRow('employee_fingerprints', { ...fingerprintRecord, status: 'Deleted' }, 'fingerprint_id');
+                } catch (err) {
+                  console.error('❌ Supabase sync error:', err.message);
+                }
+              });
+              
+              // Now start new enrollment
+              Object.assign(enrollmentStatus, {
+                slot,
+                employee_id,
+                status: 'enrolling',
+                message: 'Ready for new fingerprint...',
+                saved: false
+              });
+              
+              const enrollCommand = `ENROLL:${employee_id}:${slot}\n`;
+              port.write(enrollCommand, (err) => {
+                if (err) {
+                  console.error('❌ Error starting enrollment:', err);
+                }
+              });
+              
+              resolve(reply.send({ 
+                success: true, 
+                message: 'Ready for re-enrollment',
+                slot
+              }));
+            }).catch((err) => {
+              console.error('❌ Database deletion error:', err);
+              resolve(reply.status(500).send({ success: false, error: 'Failed to delete old fingerprint' }));
+            });
           }
         }, 3000);
 
@@ -537,11 +545,50 @@ export function fingerprintController(pg) {
             responseReceived = true;
             clearTimeout(timeout);
             console.log(`✅ Hardware deleted: ${message}`);
-            resolve(reply.send({ 
-              success: true, 
-              message: 'Ready for re-enrollment. Please enroll new fingerprint.',
-              slot
-            }));
+            
+            // Delete from database
+            pg.query(
+              'DELETE FROM employee_fingerprints WHERE fingerprint_slot = $1 RETURNING *',
+              [slot]
+            ).then((result) => {
+              console.log(`✅ Old fingerprint deleted for re-enrollment`);
+              
+              // Sync deletion to Supabase
+              setImmediate(async () => {
+                try {
+                  await syncRow('employee_fingerprints', { ...fingerprintRecord, status: 'Deleted' }, 'fingerprint_id');
+                } catch (err) {
+                  console.error('❌ Supabase sync error:', err.message);
+                }
+              });
+              
+              // Now start new enrollment
+              Object.assign(enrollmentStatus, {
+                slot,
+                employee_id,
+                status: 'enrolling',
+                message: 'Ready for new fingerprint...',
+                saved: false
+              });
+              
+              const enrollCommand = `ENROLL:${employee_id}:${slot}\n`;
+              port.write(enrollCommand, (err) => {
+                if (err) {
+                  console.error('❌ Error starting enrollment:', err);
+                } else {
+                  console.log('✅ Re-enrollment command sent');
+                }
+              });
+              
+              resolve(reply.send({ 
+                success: true, 
+                message: 'Ready for re-enrollment',
+                slot
+              }));
+            }).catch((err) => {
+              console.error('❌ Database deletion error:', err);
+              resolve(reply.status(500).send({ success: false, error: 'Failed to delete old fingerprint' }));
+            });
           }
         };
 
@@ -550,11 +597,7 @@ export function fingerprintController(pg) {
             responseReceived = true;
             clearTimeout(timeout);
             console.error('❌ Arduino error:', err);
-            resolve(reply.send({ 
-              success: true, 
-              message: 'Backup deleted. Ready for re-enrollment.',
-              slot
-            }));
+            resolve(reply.status(500).send({ success: false, error: 'Failed to communicate with device' }));
           } else {
             console.log('✅ Delete command sent to Arduino:', command);
           }
@@ -562,116 +605,12 @@ export function fingerprintController(pg) {
       });
 
     } catch (error) {
-      await pg.query('ROLLBACK'); // Undo partial changes
       console.error('❌ Re-enrollment error:', error);
       return reply.status(500).send({ success: false, error: 'Failed to start re-enrollment' });
     }
   };
 
-
-
-
-  const cancelReenroll = async (req, reply) => {
-    let { slot } = req.body;
-    try {
-      slot = parseInt(slot, 10);
-      console.log(`↩️ Cancelling re-enrollment for slot ${slot}`);
-      
-      // Check backup
-      const checkRes = await pg.query(
-        'SELECT * FROM employee_fingerprints WHERE fingerprint_slot = $1 AND status = $2',
-        [slot, 'PendingReenroll']
-      );
-      if (checkRes.rows.length === 0) {
-        return reply.status(404).send({ success: false, error: 'No backup found' });
-      }
-      
-      const backup = checkRes.rows[0];
-      
-      // Restore to Active
-      const updateRes = await pg.query(
-        `UPDATE employee_fingerprints 
-        SET status = $1, updated_at = CURRENT_TIMESTAMP 
-        WHERE fingerprint_slot = $2 
-        RETURNING *`,
-        ['Active', slot]
-      );
-      const restored = updateRes.rows[0];
-
-      // Sync restored fingerprint to Supabase
-      setImmediate(async () => {
-        try {
-          await syncRow('employee_fingerprints', restored, 'fingerprint_id');
-          console.log('✅ Restored fingerprint synced to Supabase');
-        } catch (err) {
-          console.error('❌ Supabase sync error (restore):', err.message);
-        }
-      });
-
-      console.log(`✅ Restored old fingerprint for slot ${slot}`);
-      return reply.send({ success: true, message: 'Old fingerprint restored', slot });
-
-    } catch (error) {
-      console.error('❌ Cancel re-enrollment error:', error);
-      return reply.status(500).send({ success: false, error: 'Failed to cancel re-enrollment' });
-    }
-  };
-
-  const confirmReenroll = async (req, reply) => {
-    let { slot } = req.body;
-    try {
-      slot = parseInt(slot, 10);
-      console.log(`✅ Confirming re-enrollment for slot ${slot}`);
-      
-      // Delete old backup
-      const deleteRes = await pg.query(
-        'DELETE FROM employee_fingerprints WHERE fingerprint_slot = $1 AND status = $2 RETURNING *',
-        [slot, 'PendingReenroll']
-      );
-      const deletedBackup = deleteRes.rows[0];
-      
-      // Sync deletion to Supabase
-      if (deletedBackup) {
-        setImmediate(async () => {
-          try {
-            await syncRow('employee_fingerprints', { ...deletedBackup, status: 'Deleted' }, 'fingerprint_id');
-            console.log('✅ Old backup deletion synced to Supabase');
-          } catch (err) {
-            console.error('❌ Supabase sync error (delete backup):', err.message);
-          }
-        });
-      }
-
-      // Ensure new fingerprint is Active
-      const updateRes = await pg.query(
-        `UPDATE employee_fingerprints 
-        SET status = $1 
-        WHERE fingerprint_slot = $2 AND status != $3
-        RETURNING *`,
-        ['Active', slot, 'Active']
-      );
-      const newActive = updateRes.rows[0];
-
-      // Sync new Active fingerprint
-      if (newActive) {
-        setImmediate(async () => {
-          try {
-            await syncRow('employee_fingerprints', newActive, 'fingerprint_id');
-            console.log('✅ New Active fingerprint synced to Supabase');
-          } catch (err) {
-            console.error('❌ Supabase sync error (new active):', err.message);
-          }
-        });
-      }
-
-      return reply.send({ success: true, message: 'Re-enrollment confirmed. New fingerprint is active.', slot });
-
-    } catch (error) {
-      console.error('❌ Confirm re-enrollment error:', error);
-      return reply.status(500).send({ success: false, error: 'Failed to confirm re-enrollment' });
-    }
-  };
-  // Get fingerprint logs
+  // Get fingerprint logs - NO AUTH
   const getFingerprintLogs = async (req, reply) => {
     const { employee_id, date } = req.query;
     
@@ -720,8 +659,6 @@ export function fingerprintController(pg) {
     deleteFingerprint,
     getEmployeesWithFingerprintStatus,
     getFingerprintLogs,
-    startReenroll,     
-    cancelReenroll,      
-    confirmReenroll
+    startReenroll
   };
 }

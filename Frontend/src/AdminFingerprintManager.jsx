@@ -26,40 +26,13 @@ const AdminFingerprintManager = () => {
     setFilteredEmployees(filtered);
   }, [searchQuery, employees]);
 
-  const getToken = () => {
-    const cookies = document.cookie.split('; ');
-    
-    // Try admin_token first
-    const adminToken = cookies
-      .find(row => row.startsWith('admin_token='))
-      ?.split('=')[1];
-    
-    // Try employee_token if admin_token not found or is "undefined"
-    const employeeToken = cookies
-      .find(row => row.startsWith('employee_token='))
-      ?.split('=')[1];
-    
-    // Return whichever is valid (not undefined string)
-    const token = (adminToken && adminToken !== 'undefined') ? adminToken : employeeToken;
-    
-    // Filter out "undefined" string
-    return (token && token !== 'undefined') ? token : null;
-  };
-
   const fetchEmployeesWithFingerprints = async () => {
     try {
-      const token = getToken();
+      console.log('🔍 Fetching employees with fingerprints...');
       
-      if (!token) {
-        setActionStatus({ type: 'error', message: '❌ No authentication token found. Please log in again.' });
-        setLoading(false);
-        return;
-      }
-
       const response = await fetch('http://192.168.1.9:3001/api/fingerprint/admin/employees', {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -98,13 +71,12 @@ const AdminFingerprintManager = () => {
         return slot;
       }
     }
-    return null; // All slots occupied
+    return null;
   };
 
   const handleEnrollFingerprint = async () => {
     let slotToUse = enrollSlot;
 
-    // If auto mode is enabled, find first available slot
     if (autoSlot) {
       const availableSlot = findFirstAvailableSlot();
       if (!availableSlot) {
@@ -112,7 +84,7 @@ const AdminFingerprintManager = () => {
         return;
       }
       slotToUse = availableSlot;
-      setEnrollSlot(availableSlot.toString()); // Update UI to show which slot was auto-selected
+      setEnrollSlot(availableSlot.toString());
     } else if (!slotToUse || slotToUse < 1 || slotToUse > 127) {
       setActionStatus({ type: 'error', message: 'Please enter a valid slot number (1-127)' });
       return;
@@ -120,17 +92,12 @@ const AdminFingerprintManager = () => {
 
     try {
       setActionStatus({ type: 'processing', message: `Starting enrollment in slot ${slotToUse}...` });
-      const token = getToken();
 
-      if (!token) {
-        setActionStatus({ type: 'error', message: '❌ No authentication token found. Please log in again.' });
-        return;
-      }
+      console.log('📤 Enrolling:', { employee_id: selectedEmployee.employee_id, slot: parseInt(slotToUse) });
 
       const response = await fetch('http://192.168.1.9:3001/api/fingerprint/enroll', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -140,6 +107,7 @@ const AdminFingerprintManager = () => {
       });
 
       const data = await response.json();
+      console.log('📨 Enroll response:', data);
 
       if (response.ok && data.success) {
         setActionStatus({ type: 'processing', message: 'Enrollment started! Place finger on sensor...' });
@@ -155,7 +123,7 @@ const AdminFingerprintManager = () => {
   };
 
   const pollEnrollmentStatus = async (slot) => {
-    const maxAttempts = 60; // 60 seconds timeout
+    const maxAttempts = 60;
     let attempts = 0;
 
     const poll = setInterval(async () => {
@@ -202,12 +170,11 @@ const AdminFingerprintManager = () => {
   const handleDeleteFingerprint = async () => {
     try {
       setActionStatus({ type: 'processing', message: 'Deleting fingerprint...' });
-      const token = getToken();
 
       const response = await fetch(`http://192.168.1.9:3001/api/fingerprint/${selectedEmployee.fingerprint_slot}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         }
       });
 
@@ -232,37 +199,12 @@ const AdminFingerprintManager = () => {
 
   const handleReenroll = async () => {
     try {
-      setActionStatus({ type: 'processing', message: 'Deleting old fingerprint...' });
-      const token = getToken();
+      setActionStatus({ type: 'processing', message: 'Starting re-enrollment...' });
       const oldSlot = selectedEmployee.fingerprint_slot;
 
-      // Step 1: Delete old fingerprint from hardware and database
-      const deleteResponse = await fetch(`http://192.168.1.9:3001/api/fingerprint/${oldSlot}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      const deleteData = await deleteResponse.json();
-
-      if (!deleteResponse.ok || !deleteData.success) {
-        throw new Error(deleteData.error || 'Failed to delete old fingerprint');
-      }
-
-      setActionStatus({ 
-        type: 'processing', 
-        message: 'Old fingerprint deleted. Starting new enrollment...' 
-      });
-
-      // Step 2: Wait a moment for hardware deletion to complete
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Step 3: Start new enrollment in the same slot
-      const enrollResponse = await fetch('http://192.168.1.9:3001/api/fingerprint/enroll', {
+      const response = await fetch('http://192.168.1.9:3001/api/fingerprint/reenroll', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -271,9 +213,9 @@ const AdminFingerprintManager = () => {
         })
       });
 
-      const enrollData = await enrollResponse.json();
+      const data = await response.json();
 
-      if (enrollResponse.ok && enrollData.success) {
+      if (response.ok && data.success) {
         setActionStatus({ 
           type: 'processing', 
           message: 'Ready for new fingerprint! Place finger on sensor...' 
@@ -281,7 +223,7 @@ const AdminFingerprintManager = () => {
         setIsPolling(true);
         pollEnrollmentStatus(oldSlot);
       } else {
-        throw new Error(enrollData.error || 'Failed to start new enrollment');
+        throw new Error(data.error || 'Failed to start re-enrollment');
       }
 
     } catch (error) {
@@ -319,13 +261,11 @@ const AdminFingerprintManager = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Fingerprint Management</h1>
           <p className="text-gray-600">View and manage employee fingerprint registrations</p>
         </div>
 
-        {/* Error Banner */}
         {actionStatus.type === 'error' && !showModal && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
@@ -341,7 +281,6 @@ const AdminFingerprintManager = () => {
           </div>
         )}
 
-        {/* Search Bar */}
         <div className="mb-6">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -355,7 +294,6 @@ const AdminFingerprintManager = () => {
           </div>
         </div>
 
-        {/* Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
             <div className="flex items-center gap-4">
@@ -398,7 +336,6 @@ const AdminFingerprintManager = () => {
           </div>
         </div>
 
-        {/* Employee Table */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -434,9 +371,7 @@ const AdminFingerprintManager = () => {
                 {filteredEmployees.map((employee) => (
                   <tr key={employee.employee_id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
-                      <div>
-                        <p className="font-medium text-gray-900">{employee.fullname}</p>
-                      </div>
+                      <p className="font-medium text-gray-900">{employee.fullname}</p>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-700">
                       {employee.position}
@@ -512,7 +447,6 @@ const AdminFingerprintManager = () => {
         </div>
       </div>
 
-      {/* Modal */}
       {showModal && selectedEmployee && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
@@ -562,7 +496,6 @@ const AdminFingerprintManager = () => {
                         </div>
                       </div>
 
-                      {/* Auto Slot Toggle */}
                       <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
                         <div className="flex items-center gap-3">
                           <input
@@ -682,7 +615,7 @@ const AdminFingerprintManager = () => {
                     <>
                       <div className="bg-blue-50 border-blue-200 p-4 rounded-xl border">
                         <p className="text-sm font-semibold text-blue-900 mb-3">
-                          🔄 This will allow employee to enroll again
+                          🔄 This will delete old fingerprint and start new enrollment
                         </p>
                         <div className="space-y-1 text-sm text-gray-700 bg-white bg-opacity-50 p-3 rounded">
                           <p><strong>Employee:</strong> {selectedEmployee.fullname}</p>
@@ -693,7 +626,7 @@ const AdminFingerprintManager = () => {
 
                       <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
                         <p className="text-xs text-yellow-800">
-                          ℹ️ Old fingerprint will be deleted from both database and hardware
+                          ℹ️ Old fingerprint will be deleted and you'll be prompted to scan new fingerprint
                         </p>
                       </div>
 

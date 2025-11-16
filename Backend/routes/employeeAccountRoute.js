@@ -17,6 +17,11 @@ export function employeeAccountRoutes(fastify, options){
     fastify.get("/employee/schedule/:id", controller.getEmployeeSchedule);
     fastify.post("/employee/availability", controller.saveAvailability);
 
+    fastify.get("/employee/timelogs/:id", controller.getEmployeeTimeLogs);
+    fastify.get("/employee/attendance-data/:id", controller.getEmployeeAttendanceData);
+
+    fastify.put("/employee/:id/availability", controller.updateEmployeeAvailability);
+
     fastify.post("/employee/request/:id", controller.sendRequest);
     fastify.delete("/employee/request/:type/:requestId", controller.deleteRequest);
     fastify.put("/employee/requests/:requestId/action", controller.handleRequestAction);

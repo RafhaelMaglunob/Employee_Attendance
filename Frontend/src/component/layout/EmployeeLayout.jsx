@@ -245,8 +245,7 @@ export default function EmployeeLayout() {
 				<div className="w-full flex justify-between items-center">
 					<img src="../img/TheCrunchLogoSnoBG 1.png" className="w-auto object-contain" alt="Logo" />
 					<h1 className="text-xl font-bold">{path}</h1>
-					<div className="flex flex-row items-center space-x-4 relative">
-						<img src="../img/Notification.png" alt="Notification Icon" className="w-5 h-5" />
+					<div className="flex flex-row items-center space-x-4 relative">	
 						<Headers userRole={userRole} userEmail={userEmail} onLogout={handleLogout}>
 							<img src="../img/UserProfile.png" alt="Profile Icon" className="w-5 h-5 rounded-full" />
 						</Headers>

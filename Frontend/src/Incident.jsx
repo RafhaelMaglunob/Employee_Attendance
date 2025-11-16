@@ -218,6 +218,7 @@ function Incident() {
                         </div>
                     </Card>
                 </div>
+                
             </div>
         </div>
     )

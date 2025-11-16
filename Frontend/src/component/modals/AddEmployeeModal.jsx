@@ -220,7 +220,7 @@ export default function AddEmployeeModal({ isOpen, onClose, pushData }) {
 		const payload = preparePayload(formValues);
 
 		try {
-			const res = await fetch("http://192.168.1.9:3001/api/employees", {
+			const res = await fetch("http://10.155.206.28:3001/api/employees", {
 				method: "POST",
 				headers: { 
 					"Content-Type": "application/json",
@@ -304,7 +304,7 @@ export default function AddEmployeeModal({ isOpen, onClose, pushData }) {
 		for (const row of excelRows) {
 			const payload = preparePayload(mapExcelRowToForm(row));
 			try {
-				const res = await fetch("http://192.168.1.9:3001/api/employees", {
+				const res = await fetch("http://10.155.206.28:3001/api/employees", {
 					method: "POST",
 					headers: { 
 						"Content-Type": "application/json",

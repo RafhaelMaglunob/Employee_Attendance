@@ -26,6 +26,14 @@ import EmployeeDetails from "./EmployeeDetails.jsx";
 import EmployeeDocuments from "./EmployeeDocuments.jsx";
 import EmployeeSetting from "./EmployeeSetting.jsx";
 import EmployeeIncident from "./EmployeeIncident.jsx";
+import EmployeeCertificate from "./EmployeeCertificate.jsx";
+
+import ForgotPassword from './ForgotPassword';  
+import ResetPassword from './ResetPassword';  
+
+import EmployeeForgotPassword from "./EmployeeForgotPassword.jsx";
+import EmployeeResetPassword from "./EmployeeResetPassword.jsx";  
+
 
 function App() {
   return (
@@ -34,6 +42,8 @@ function App() {
         <Routes>
           {/* Admin login */}
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />  
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
 
           {/* Admin protected routes */}
           <Route
@@ -44,8 +54,8 @@ function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Dashboard />} />
-            <Route path="dashboard" element={<Dashboard />} />
+            <Route index element={<Employees />} />
+            <Route path="dashboard" element={<Employees />} />
             <Route path="employees" element={<Employees />} />
             <Route path="fingerprint" element={<AdminFingerprintManager />} />
             <Route path="audit" element={<Auditing />} />
@@ -58,6 +68,8 @@ function App() {
 
           {/* Employee login */}
           <Route path="/employee-login" element={<EmployeeLogin />} />
+          <Route path="/employee/forgot-password" element={<EmployeeForgotPassword />} />
+          <Route path="/employee/reset-password/:token" element={<EmployeeResetPassword />} />
 
           {/* Employee protected routes */}
           <Route
@@ -77,6 +89,7 @@ function App() {
             <Route path="document" element={<EmployeeDocuments />} />
             <Route path="incident-reports" element={<EmployeeIncident />} />
             <Route path="setting" element={<EmployeeSetting />} />
+            <Route path="certificate" element={<EmployeeCertificate />} />
           </Route>
 
           <Route path="*" element={<RedirectToBase />} />

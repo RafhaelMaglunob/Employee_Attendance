@@ -11,7 +11,14 @@ import { createEmployeesTable } from "./db/employee.js";
 import { createArchiveTable } from "./db/archive.js";
 import argon2 from "argon2";
 
+import fastifyStatic from '@fastify/static';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
 import { initEmployeeDeletionSchedules } from "./utils/employeeDeletionScheduler.js";
+import { initEmployeeRestorationSchedules } from "./utils/EmployeeRestoreScheduler.js";
+import { initLeaveReturnCatchUp } from "./utils/employeeLeaveSchedule.js";
+
 import "./utils/scheduler.js";
 
 import { employeeRoutes } from "./routes/employeeRoute.js";
@@ -23,6 +30,12 @@ import { employeeAccountRoutes } from "./routes/employeeAccountRoute.js";
 import { scheduleRoutes } from "./routes/scheduleRoute.js";
 import { incidentRoutes } from "./routes/incidentRoute.js";
 import { fingerprintRoutes } from "./routes/fingerprintRoute.js";
+import { forgotPasswordRoutes } from "./routes/forgotPasswordRoute.js";
+import { certificateRoutes } from "./routes/certificateRoute.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 
 const fastify = Fastify();
 const io = initSocket(fastify.server);
@@ -44,8 +57,6 @@ const parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
 let enrollmentStatus = {};
 
 // Listen to Arduino messages
-// Add these to your server.js parser.on('data') handler
-
 parser.on('data', async (data) => {
   const message = data.toString().trim();
   console.log('📨 Arduino:', message);
@@ -122,7 +133,6 @@ parser.on('data', async (data) => {
       const exists = status === 'EXISTS';
       enrollmentStatus.validationCallback(exists);
       
-      // Clean up
       delete enrollmentStatus.validationSlot;
       delete enrollmentStatus.validationCallback;
     }
@@ -196,7 +206,6 @@ parser.on('data', async (data) => {
 async function processAttendance(fingerprintSlot, confidence) {
   const client = await pool.connect();
   try {
-    // Get employee by fingerprint slot
     const fingerprintData = await client.query(
       `SELECT ef.employee_id, e.fullname 
        FROM employee_fingerprints ef
@@ -215,7 +224,6 @@ async function processAttendance(fingerprintSlot, confidence) {
     const currentDate = currentTime.toISOString().split('T')[0];
     const timeString = currentTime.toTimeString().split(' ')[0];
     
-    // Check today's attendance
     const todayAttendance = await client.query(
       `SELECT * FROM employee_attendance 
        WHERE employee_id = $1 AND attend_date = $2`,
@@ -240,7 +248,6 @@ async function processAttendance(fingerprintSlot, confidence) {
       
       console.log(`✅ ${fullname} clocked IN at ${timeString}`);
       
-      // Emit real-time event
       io.emit('attendance:clock-in', {
         employee_id,
         fullname,
@@ -270,7 +277,6 @@ async function processAttendance(fingerprintSlot, confidence) {
       
       console.log(`✅ ${fullname} clocked OUT at ${timeString} (${hours}h)`);
       
-      // Emit real-time event
       io.emit('attendance:clock-out', {
         employee_id,
         fullname,
@@ -280,7 +286,6 @@ async function processAttendance(fingerprintSlot, confidence) {
       });
     }
     
-    // Update last used
     await client.query(
       `UPDATE employee_fingerprints 
        SET last_used = CURRENT_TIMESTAMP 
@@ -300,9 +305,17 @@ fastify.decorate("io", io);
 fastify.decorate("port", port);
 fastify.decorate("enrollmentStatus", enrollmentStatus);
 
+await fastify.register(fastifyStatic, {
+  root: join(__dirname, 'certificates'),
+  prefix: '/certificates/',
+  decorateReply: false // Important: don't override reply.sendFile
+});
+
 fastify.register(fastifyJwt, {
   secret: "yourSuperSecretKeyHere",
 });
+
+
 
 fastify.decorate("authenticate", async function (req, reply) {
   try {
@@ -322,9 +335,9 @@ await fastify.register(cors, {
     process.env.FRONTEND_URL3,
     process.env.FRONTEND_URL4
   ],
+  credentials: true,  
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
 });
-
 
 fastify.get("/setup", async(req, reply) => {
     const client = await pool.connect()
@@ -340,7 +353,6 @@ fastify.get("/setup", async(req, reply) => {
     }
 })
 
-// Test route
 fastify.get("/", async (req, res) => {
   return { message: "🚀 Server is running!" };
 });
@@ -349,16 +361,33 @@ fastify.register( employeeRoutes, {prefix: "/api", io} )
 fastify.register( archiveRoutes, {prefix: "/api", io} )
 fastify.register( logRoutes, {prefix: "/api", io} )
 fastify.register( attendanceRoutes, {prefix: "/api", io} )
-fastify.register( adminAccountRoutes, {prefix: "/api", io} )
+fastify.register( adminAccountRoutes, {prefix: "/api"} )
 fastify.register( employeeAccountRoutes, {prefix: "/api", io})
 fastify.register( scheduleRoutes, {prefix: "/api", io})
 fastify.register( incidentRoutes, {prefix: "/api", io})
 fastify.register( fingerprintRoutes, { prefix: "/api", io });
+fastify.register( forgotPasswordRoutes, { prefix: "/api", io });
+fastify.register( certificateRoutes, { prefix: "/api", io });
+
+// ========================================
+// STARTUP INITIALIZATION
+// ========================================
+
+console.log('⏳ Initializing schedulers...');
+
+// Initialize leave scheduler WITH startup check (runs check on startup)
+await initLeaveReturnCatchUp(pool, io)
+  .then(() => console.log('✅ Leave scheduler with startup check initialized'))
+  .catch(err => console.error('❌ Failed to start leave scheduler', err));
 
 await initEmployeeDeletionSchedules(pool)
   .then(() => console.log('✅ Employee deletion scheduler started'))
   .catch(err => console.error('❌ Failed to start scheduler', err));
-    
+
+await initEmployeeRestorationSchedules(pool)
+  .then(() => console.log('✅ Employee restoration scheduler started'))
+  .catch(err => console.error('❌ Failed to start scheduler', err));
+      
 fastify.listen({ port: Number(process.env.PORT), host: '0.0.0.0' }, (err, address) => {
   if (err) {
     console.error(err);

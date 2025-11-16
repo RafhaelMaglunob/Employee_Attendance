@@ -223,7 +223,13 @@ function Employees() {
 
 			<AddEmployeeModal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} pushData={pushData} />
 			<ViewEmployeeModal isOpen={isViewOpen} onClose={() => setIsViewOpen(false)} employeeId={selectedId} updateData={updateData} api={api} />
-			<DeleteEmployeeModal isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} employeeId={selectedId} updateData={updateData} api={api} />
+			<DeleteEmployeeModal 
+				isOpen={isDeleteOpen} 
+				onClose={() => setIsDeleteOpen(false)} 
+				employeeId={selectedId} 
+				updateData={updateData} 
+				api={api} 
+			/>
 			<RetrieveEmployeeModal isOpen={isRetrieveOpen} onClose={() => setIsRetrieveOpen(false)} employeeId={selectedId} updateData={updateData} api={api} />
 			<RenewContractModal isOpen={isRenewOpen} onClose={() => setIsRenewOpen(false)} employeeId={renewEmployeeId} updateData={updateData} /> 
 			<DocumentEmployeeModal isOpen={isDocumentOpen} onClose={() => setIsDocumentOpen(false)} employeeId={documentEmployeeId} />

@@ -9,6 +9,9 @@ function EmployeeLogin() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+
+    // Vite uses import.meta.env instead of process.env
+    const API_URL = import.meta.env.VITE_API_URL || 'http://192.168.1.9:3001'
     
     useEffect(() => {
         const token = Cookies.get("employee_token");
@@ -18,7 +21,7 @@ function EmployeeLogin() {
     }, [navigate]);
 
     const handleLogin = async () => {
-        const res = await fetch("http://192.168.1.9:3001/api/employee-login", {
+        const res = await fetch(`${API_URL}/api/employee-login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, password }),
@@ -36,6 +39,10 @@ function EmployeeLogin() {
             localStorage.setItem("isFirstLogin", data.data.must_change_password);
             navigate("/employee/dashboard", { replace: true });
         }
+    };
+
+    const handleForgotPassword = () => {
+        navigate('/employee/forgot-password');
     };
 
     return (
@@ -67,6 +74,7 @@ function EmployeeLogin() {
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
                                 className="bg-white px-4 py-2 w-full rounded-sm border-2 focus:outline-blue-400 text-sm"
                             />
 
@@ -75,20 +83,37 @@ function EmployeeLogin() {
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
                                 className="bg-white px-4 py-2 w-full rounded-sm border-2 focus:outline-blue-400 text-sm"
                             />
 
                             <button
                                 onClick={handleLogin}
-                                className="bg-black text-white w-full py-4 text-xl font-bold rounded-md mt-3"
+                                className="bg-black text-white w-full py-4 text-xl font-bold rounded-md mt-3 hover:bg-gray-800 transition-colors"
                             >
                                 Login
                             </button>
 
-                            {error && <p className="text-red-500 text-center mt-2">{error}</p>}
-                            <div className="flex md:hidden flex-row space-x-4 justify-center items-center align-center [&_*]:text-[15px]">
+                            {error && <p className="text-red-500 text-center mt-2 text-sm">{error}</p>}
+
+                            <div className="flex items-center my-2">
+                                <div className="border-t border-gray-300 flex-1"></div>
+                                <span className="px-3 text-gray-500 text-xs font-medium">or</span>
+                                <div className="border-t border-gray-300 flex-1"></div>
+                            </div>
+
+                            <div className="text-red-600 flex items-center text-center justify-center">
+                                <a 
+                                    onClick={handleForgotPassword}
+                                    className="cursor-pointer border-b border-transparent hover:border-current text-sm"
+                                >
+                                    Forgot Password?
+                                </a>
+                            </div>
+
+                            <div className="flex md:hidden flex-row space-x-4 justify-center items-center align-center [&_*]:text-[15px] mt-4">
                                 <img src="../img/Biometric_Icon.png" alt="Biometric Icon" className="w-4 h-4" />
-                                <p>Use Biometric Login</p>
+                                <p className="text-gray-600">Use Biometric Login</p>
                             </div>
                         </div>
                     </Card>
